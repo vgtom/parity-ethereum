@@ -91,6 +91,16 @@ pub fn new_kovan<'a, T: Into<SpecParams<'a>>>(params: T) -> Spec {
 	load(params.into(), include_bytes!("../../res/ethereum/kovan.json"))
 }
 
+/// Create a new poa core chain spec.
+pub fn new_poacore<'a, T: Into<SpecParams<'a>>>(params: T) -> Spec {
+	load(params.into(), include_bytes!("../../res/ethereum/poacore.json"))
+}
+
+/// Create a new poa sokol chain spec.
+pub fn new_poasokol<'a, T: Into<SpecParams<'a>>>(params: T) -> Spec {
+	load(params.into(), include_bytes!("../../res/ethereum/poasokol.json"))
+}
+
 /// Create a new Foundation Ropsten chain spec.
 pub fn new_ropsten<'a, T: Into<SpecParams<'a>>>(params: T) -> Spec {
 	load(params.into(), include_bytes!("../../res/ethereum/ropsten.json"))
