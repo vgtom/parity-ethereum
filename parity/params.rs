@@ -45,6 +45,7 @@ pub enum SpecType {
 	Ropsten,
 	Kovan,
 	Sokol,
+	Indica,
 	Dev,
 	Custom(String),
 }
@@ -74,6 +75,7 @@ impl str::FromStr for SpecType {
 			"ropsten" => SpecType::Ropsten,
 			"kovan" | "testnet" => SpecType::Kovan,
 			"sokol" | "poasokol" => SpecType::Sokol,
+			"indica" | "poaindica" => SpecType::Indica,
 			"dev" => SpecType::Dev,
 			other => SpecType::Custom(other.into()),
 		};
@@ -98,6 +100,7 @@ impl fmt::Display for SpecType {
 			SpecType::Ropsten => "ropsten",
 			SpecType::Kovan => "kovan",
 			SpecType::Sokol => "sokol",
+			SpecType::Indica => "indica",
 			SpecType::Dev => "dev",
 			SpecType::Custom(ref custom) => custom,
 		})
@@ -122,6 +125,7 @@ impl SpecType {
 			SpecType::Ropsten => Ok(ethereum::new_ropsten(params)),
 			SpecType::Kovan => Ok(ethereum::new_kovan(params)),
 			SpecType::Sokol => Ok(ethereum::new_sokol(params)),
+			SpecType::Indica => Ok(ethereum::new_indica(params)),
 			SpecType::Dev => Ok(Spec::new_instant()),
 			SpecType::Custom(ref filename) => {
 				let file = fs::File::open(filename).map_err(|e| format!("Could not load specification file at {}: {}", filename, e))?;
@@ -378,6 +382,8 @@ mod tests {
 		assert_eq!(SpecType::Kovan, "testnet".parse().unwrap());
 		assert_eq!(SpecType::Sokol, "sokol".parse().unwrap());
 		assert_eq!(SpecType::Sokol, "poasokol".parse().unwrap());
+		assert_eq!(SpecType::Indica, "indica".parse().unwrap());
+		assert_eq!(SpecType::Indica, "poaindica".parse().unwrap());
 	}
 
 	#[test]
@@ -401,6 +407,7 @@ mod tests {
 		assert_eq!(format!("{}", SpecType::Ropsten), "ropsten");
 		assert_eq!(format!("{}", SpecType::Kovan), "kovan");
 		assert_eq!(format!("{}", SpecType::Sokol), "sokol");
+		assert_eq!(format!("{}", SpecType::Indica), "indica");
 		assert_eq!(format!("{}", SpecType::Dev), "dev");
 		assert_eq!(format!("{}", SpecType::Custom("foo/bar".into())), "foo/bar");
 	}

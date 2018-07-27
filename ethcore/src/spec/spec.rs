@@ -33,7 +33,8 @@ use vm::{EnvInfo, CallType, ActionValue, ActionParams, ParamsType};
 
 use builtin::Builtin;
 use encoded;
-use engines::{EthEngine, NullEngine, InstantSeal, BasicAuthority, AuthorityRound, Tendermint, DEFAULT_BLOCKHASH_CONTRACT};
+use engines::{EthEngine, NullEngine, InstantSeal, BasicAuthority, AuthorityRound, Tendermint,
+	Hbbft, DEFAULT_BLOCKHASH_CONTRACT};
 use error::Error;
 use executive::Executive;
 use factory::Factories;
@@ -602,6 +603,9 @@ impl Spec {
 				.expect("Failed to start AuthorityRound consensus engine."),
 			ethjson::spec::Engine::Tendermint(tendermint) => Tendermint::new(tendermint.params.into(), machine)
 				.expect("Failed to start the Tendermint consensus engine."),
+			ethjson::spec::Engine::Hbbft(hbbft) => Hbbft::new(hbbft.params.into(), machine)
+            	.expect("Failed to start the hbbft consensus engine."),
+
 		}
 	}
 
