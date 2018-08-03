@@ -19,6 +19,8 @@ use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 use std::thread;
 
+use std::net::ToSocketAddrs;
+
 use ansi_term::Colour;
 use bytes::Bytes;
 use ethcore::account_provider::{AccountProvider, AccountProviderSettings};
@@ -65,6 +67,8 @@ use secretstore;
 use signer;
 use db;
 use ethkey::Password;
+
+use hydrabadger::Hydrabadger;
 
 // how often to take periodic snapshots.
 const SNAPSHOT_PERIOD: u64 = 5000;
@@ -475,6 +479,14 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 
 	// spin up event loop
 	let event_loop = EventLoop::spawn();
+
+	let hdb_bind_address = "localhost:6000"
+        .to_socket_addrs()
+        .expect("Invalid bind address")
+        .next().unwrap();
+
+	// Hydrabadger
+	let hdb = Hydrabadger::with_defaults(hdb_bind_address);
 
 	// fetch service
 	let fetch = fetch::Client::new().map_err(|e| format!("Error starting fetch client: {:?}", e))?;
