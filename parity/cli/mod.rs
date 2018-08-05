@@ -1090,7 +1090,30 @@ usage! {
 			ARG arg_ntp_servers: (Option<String>) = None, or |_| None,
 			"--ntp-servers=[HOSTS]",
 			"Does nothing; checking if clock is sync with NTP servers is now done on the UI.",
+
+		["Hbbft Engine Options"]
+
+			ARG arg_hbbft_port: (Option<u16>) = None, or |c: &Config| c.hbbft.as_ref()?.port.clone(),
+			"--hbbft-port=[PORT]",
+			"Specifies the port upon which the hydrabadger hbbft node will listen.",
+
+			ARG arg_hbbft_interface: (String) = "local", or |c: &Config| c.hbbft.as_ref()?.interface.clone(),
+			"--hbbft-interface=[HOST]",
+			// "Specifies the local address for the hydrabadger hbbft node to listen on.",
+			"Specifies the IP address upon which the hydrabadger hbbft node will listen. Use 'local' for localhost.",
+
+			ARG arg_hbbft_bind_address: (Option<String>) = None, or |c: &Config| c.hbbft.as_ref()?.bind_address.clone(),
+			"--hbbft-bind-address=[HOST:PORT]",
+			"Specifies the local address for the hydrabadger hbbft node to listen on.",
 	}
+}
+
+#[derive(Default, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Hbbft {
+	port: Option<u16>,
+	interface: Option<String>,
+	bind_address: Option<String>,
 }
 
 #[derive(Default, Debug, PartialEq, Deserialize)]
@@ -1114,6 +1137,7 @@ struct Config {
 	stratum: Option<Stratum>,
 	whisper: Option<Whisper>,
 	light: Option<Light>,
+	hbbft: Option<Hbbft>,
 }
 
 #[derive(Default, Debug, PartialEq, Deserialize)]
