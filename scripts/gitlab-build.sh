@@ -145,7 +145,7 @@ updater_push_release () {
   # Kovan
   source scripts/safe_curl.sh $DATA "http://update.parity.io:1338/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
 }
-
+echo "check platform"
 case $BUILD_PLATFORM in
   x86_64-unknown-linux-gnu)
     #set strip bin
@@ -167,7 +167,7 @@ case $BUILD_PLATFORM in
     make_archive
 #    push_binaries
     ;;
-  centos-x86_64)
+  x86_64-centos)
     STRIP_BIN="strip"
     set_env
     build
