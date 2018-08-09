@@ -139,7 +139,7 @@ windows:
     - stable
     - triggers
   script:
-    - .\scripts\gitlab-build.sh x86_64-pc-windows-msvc x86_64-pc-windows-msvc amd64 "" "" windows
+    - bash ./scripts/gitlab-build.sh x86_64-pc-windows-msvc x86_64-pc-windows-msvc amd64 "" "" windows
   tags:
    - rust-windows
   artifacts:
