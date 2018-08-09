@@ -54,7 +54,7 @@ centos-x86_64:
     - stable
     - triggers
   script:
-    - scripts/gitlab-build.sh centos-x86_64 "" amd64 gcc g++ centos
+    - scripts/gitlab-build.sh centos-x86_64 unknown amd64 gcc g++ centos
   tags:
     - centos
   artifacts:
