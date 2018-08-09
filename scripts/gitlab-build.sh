@@ -51,7 +51,20 @@ build () {
     echo "Remove index"
     rm -rf cargo/registry/index/*.
   fi
-  echo "Build parity:"
+ echo "Build parity:"
+  if [[ "x86_64-centos" = $PLATFORM ]]
+  then
+  echo "x86_64-centos platform."
+  cargo build --features final --release
+  echo "Build evmbin:"
+  cargo build --release -p evmbin
+  echo "Build ethstore-cli:"
+  cargo build --release -p ethstore-cli
+  echo "Build ethkey-cli:"
+  cargo build --release -p ethkey-cli
+  echo "Build whisper-cli:"
+  cargo build --release -p whisper-cli
+else
   cargo build --target $PLATFORM --features final --release
   echo "Build evmbin:"
   cargo build --target $PLATFORM --release -p evmbin
@@ -61,6 +74,7 @@ build () {
   cargo build --target $PLATFORM --release -p ethkey-cli
   echo "Build whisper-cli:"
   cargo build --target $PLATFORM --release -p whisper-cli
+fi
 }
 strip_binaries () {
   echo "Strip binaries:"
