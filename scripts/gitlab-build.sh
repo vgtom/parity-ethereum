@@ -52,7 +52,7 @@ build () {
     rm -rf cargo/registry/index/*.
   fi
  echo "Build parity:"
-  if [[ "x86_64-centos" = $PLATFORM ]]
+  if [[ "x86_64-centos" = $BUILD_PLATFORM ]]
   then
   echo "x86_64-centos platform."
   cargo build --features final --release
