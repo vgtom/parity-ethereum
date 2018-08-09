@@ -153,6 +153,15 @@ case $BUILD_PLATFORM in
     make_archive
 #    push_binaries
     ;;
+  centos-x86_64)
+    STRIP_BIN="strip"
+    set_env
+    build
+    strip_binaries
+    calculate_checksums
+    make_archive
+    push_binaries
+    ;;
   armv7-unknown-linux-gnueabihf)
     STRIP_BIN="arm-linux-gnueabihf-strip"
     set_env
