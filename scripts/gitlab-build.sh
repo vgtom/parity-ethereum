@@ -142,7 +142,7 @@ case $BUILD_PLATFORM in
     calculate_checksums
     make_archive
 #    push_binaries
-    updater_push_release
+#    updater_push_release
     ;;
   i686-unknown-linux-gnu)
     STRIP_BIN="strip"
@@ -188,7 +188,7 @@ case $BUILD_PLATFORM in
     calculate_checksums
     make_archive
 #    push_binaries
-    updater_push_release
+#    updater_push_release
     ;;
   x86_64-unknown-snap-gnu)
     ARC="amd64"
@@ -230,5 +230,5 @@ case $BUILD_PLATFORM in
     calculate_checksums
     make_archive
 #    push_binaries
-    updater_push_release
+#    updater_push_release
 esac
