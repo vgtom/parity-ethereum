@@ -116,12 +116,12 @@ push_binaries () {
   echo "Push binaries to AWS S3"
   aws configure set aws_access_key_id $s3_key
   aws configure set aws_secret_access_key $s3_secret
-  if [[ "$CI_BUILD_REF_NAME" = "beta" || "$CI_BUILD_REF_NAME" = "stable" || "$CI_BUILD_REF_NAME" = "nightly" ]];
-  then
-    export S3_BUCKET=builds-parity-published;
-  else
-    export S3_BUCKET=builds-parity;
-  fi
+#  if [[ "$CI_BUILD_REF_NAME" = "beta" || "$CI_BUILD_REF_NAME" = "stable" || "$CI_BUILD_REF_NAME" = "nightly" ]];
+#  then
+#    export S3_BUCKET=builds-parity-published;
+#  else
+#    export S3_BUCKET=builds-parity;
+#  fi
   aws s3 rm --recursive s3://$S3_BUCKET/$CI_BUILD_REF_NAME/$BUILD_PLATFORM
   aws s3api put-object --bucket $S3_BUCKET --key $CI_BUILD_REF_NAME/$BUILD_PLATFORM/parity$S3WIN --body target/$PLATFORM/release/parity$S3WIN
   aws s3api put-object --bucket $S3_BUCKET --key $CI_BUILD_REF_NAME/$BUILD_PLATFORM/parity$S3WIN.sha256 --body parity$S3WIN.sha256
