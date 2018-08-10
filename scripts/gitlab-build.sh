@@ -80,18 +80,14 @@ strip_binaries () {
   echo "Strip binaries:"
   if [[ "x86_64-centos" = $BUILD_PLATFORM ]]
   then
-    $STRIP_BIN -v target/release/parity
-    $STRIP_BIN -v target/release/parity-evm
-    $STRIP_BIN -v target/release/ethstore
-    $STRIP_BIN -v target/release/ethkey
-    $STRIP_BIN -v target/release/whisper;
-  else
-    $STRIP_BIN -v target/$PLATFORM/release/parity
-    $STRIP_BIN -v target/$PLATFORM/release/parity-evm
-    $STRIP_BIN -v target/$PLATFORM/release/ethstore
-    $STRIP_BIN -v target/$PLATFORM/release/ethkey
-    $STRIP_BIN -v target/$PLATFORM/release/whisper;
+  set PLATFORM=.
   fi
+
+  $STRIP_BIN -v target/$PLATFORM/release/parity
+  $STRIP_BIN -v target/$PLATFORM/release/parity-evm
+  $STRIP_BIN -v target/$PLATFORM/release/ethstore
+  $STRIP_BIN -v target/$PLATFORM/release/ethkey
+  $STRIP_BIN -v target/$PLATFORM/release/whisper;
 }
 calculate_checksums () {
   echo "Checksum calculation:"
