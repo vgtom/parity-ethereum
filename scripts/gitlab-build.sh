@@ -141,7 +141,7 @@ case $BUILD_PLATFORM in
     strip_binaries
     calculate_checksums
     make_archive
-#    push_binaries
+    push_binaries
 #    updater_push_release
     ;;
   i686-unknown-linux-gnu)
@@ -151,7 +151,7 @@ case $BUILD_PLATFORM in
     strip_binaries
     calculate_checksums
     make_archive
-#    push_binaries
+    push_binaries
     ;;
   x86_64-centos)
     STRIP_BIN="strip"
@@ -160,7 +160,7 @@ case $BUILD_PLATFORM in
     strip_binaries
     calculate_checksums
     make_archive
-#    push_binaries
+    push_binaries
     ;;
   armv7-unknown-linux-gnueabihf)
     STRIP_BIN="arm-linux-gnueabihf-strip"
@@ -169,7 +169,7 @@ case $BUILD_PLATFORM in
     strip_binaries
     calculate_checksums
     make_archive
-#    push_binaries
+    push_binaries
     ;;
   arm-unknown-linux-gnueabihf)
     STRIP_BIN="arm-linux-gnueabihf-strip"
@@ -178,7 +178,7 @@ case $BUILD_PLATFORM in
     strip_binaries
     calculate_checksums
     make_archive
-#    push_binaries
+    push_binaries
     ;;
   aarch64-unknown-linux-gnu)
     STRIP_BIN="aarch64-linux-gnu-strip"
@@ -187,7 +187,7 @@ case $BUILD_PLATFORM in
     strip_binaries
     calculate_checksums
     make_archive
-#    push_binaries
+    push_binaries
     ;;
   x86_64-apple-darwin)
     STRIP_BIN="strip"
@@ -196,7 +196,7 @@ case $BUILD_PLATFORM in
     strip_binaries
     calculate_checksums
     make_archive
-#    push_binaries
+    push_binaries
 #    updater_push_release
     ;;
   x86_64-unknown-snap-gnu)
@@ -238,6 +238,6 @@ case $BUILD_PLATFORM in
     sign_exe
     calculate_checksums
     make_archive
-#    push_binaries
+    push_binaries
 #    updater_push_release
 esac
