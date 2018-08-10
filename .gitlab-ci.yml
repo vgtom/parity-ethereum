@@ -56,7 +56,6 @@ centos-x86_64:
     - stable
     - triggers
   script:
-    - yum -y update glibc
     - scripts/gitlab-build.sh x86_64-centos x86_64-unknown-linux-gnu amd64 gcc g++ centos
   tags:
     - centos
