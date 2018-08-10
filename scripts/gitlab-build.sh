@@ -80,9 +80,9 @@ strip_binaries () {
   echo "Strip binaries:"
   if [[ "x86_64-centos" = $BUILD_PLATFORM ]]
   then
-  set PLATFORM=.
+  PLATFORM="."
   fi
-
+  echo "PLATFORM:" $PLATFORM
   $STRIP_BIN -v target/$PLATFORM/release/parity
   $STRIP_BIN -v target/$PLATFORM/release/parity-evm
   $STRIP_BIN -v target/$PLATFORM/release/ethstore
