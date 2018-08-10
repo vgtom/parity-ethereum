@@ -52,6 +52,19 @@ build () {
     rm -rf cargo/registry/index/*.
   fi
   echo "Build parity:"
+  if [[ "x86_64-centos" = $BUILD_PLATFORM ]]
+  then
+  echo "x86_64-centos platform."
+  cargo build --features final --release
+  echo "Build evmbin:"
+  cargo build --release -p evmbin
+  echo "Build ethstore-cli:"
+  cargo build --release -p ethstore-cli
+  echo "Build ethkey-cli:"
+  cargo build --release -p ethkey-cli
+  echo "Build whisper-cli:"
+  cargo build --release -p whisper-cli
+else
   cargo build --target $PLATFORM --features final --release
   echo "Build evmbin:"
   cargo build --target $PLATFORM --release -p evmbin
@@ -61,9 +74,15 @@ build () {
   cargo build --target $PLATFORM --release -p ethkey-cli
   echo "Build whisper-cli:"
   cargo build --target $PLATFORM --release -p whisper-cli
+  fi
 }
 strip_binaries () {
   echo "Strip binaries:"
+    if [[ "x86_64-centos" = $BUILD_PLATFORM ]]
+  then
+  PLATFORM="."
+  fi
+  echo "PLATFORM:" $PLATFORM
   $STRIP_BIN -v target/$PLATFORM/release/parity
   $STRIP_BIN -v target/$PLATFORM/release/parity-evm
   $STRIP_BIN -v target/$PLATFORM/release/ethstore
@@ -160,7 +179,7 @@ case $BUILD_PLATFORM in
     strip_binaries
     calculate_checksums
     make_archive
-    push_binaries
+#    push_binaries
     ;;
   armv7-unknown-linux-gnueabihf)
     STRIP_BIN="arm-linux-gnueabihf-strip"
