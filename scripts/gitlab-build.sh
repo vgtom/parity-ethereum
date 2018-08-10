@@ -179,7 +179,7 @@ case $BUILD_PLATFORM in
     strip_binaries
     calculate_checksums
     make_archive
-#    push_binaries
+    push_binaries
     ;;
   armv7-unknown-linux-gnueabihf)
     STRIP_BIN="arm-linux-gnueabihf-strip"

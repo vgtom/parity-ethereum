@@ -19,7 +19,7 @@ linux-amd64:
     - beta
     - tags
     - stable
-#    - triggers
+    - triggers
   script:
     - rustup default stable
     # ARGUMENTS: 1. BUILD_PLATFORM (target for binaries) 2. PLATFORM (target for cargo) 3. ARC (architecture) 4. & 5. CC & CXX flags 6. binary identifier
@@ -37,7 +37,7 @@ linux-i686:
     - beta
     - tags
     - stable
-#    - triggers
+    - triggers
   script:
     - scripts/gitlab-build.sh i686-unknown-linux-gnu i686-unknown-linux-gnu i386 gcc g++ linux
   tags:
@@ -71,7 +71,7 @@ linux-armv7:
     - beta
     - tags
     - stable
-#    - triggers
+    - triggers
   script:
     - scripts/gitlab-build.sh armv7-unknown-linux-gnueabihf armv7-unknown-linux-gnueabihf armhf arm-linux-gnueabihf-gcc arm-linux-gnueabihf-g++ linux
   tags:
@@ -88,7 +88,7 @@ linux-armhf:
     - beta
     - tags
     - stable
-#    - triggers
+    - triggers
   script:
     - scripts/gitlab-build.sh arm-unknown-linux-gnueabihf arm-unknown-linux-gnueabihf armhf arm-linux-gnueabihf-gcc arm-linux-gnueabihf-g++ linux
   tags:
@@ -105,7 +105,7 @@ linux-aarch64:
     - beta
     - tags
     - stable
-#    - triggers
+    - triggers
   script:
     - scripts/gitlab-build.sh aarch64-unknown-linux-gnu aarch64-unknown-linux-gnu arm64 aarch64-linux-gnu-gcc aarch64-linux-gnu-g++ linux
   tags:
@@ -121,7 +121,7 @@ linux-snap:
     - stable
     - beta
     - tags
-#    - triggers
+    - triggers
   script:
     - scripts/gitlab-build.sh x86_64-unknown-snap-gnu x86_64-unknown-linux-gnu amd64 gcc g++ snap
   tags:
@@ -136,7 +136,7 @@ darwin:
     - beta
     - tags
     - stable
-#    - triggers
+    - triggers
   script:
     - scripts/gitlab-build.sh x86_64-apple-darwin x86_64-apple-darwin macos gcc g++ macos
   tags:
@@ -154,7 +154,7 @@ windows:
     - beta
     - tags
     - stable
-#    - triggers
+    - triggers
   script:
     - bash ./scripts/gitlab-build.sh x86_64-pc-windows-msvc x86_64-pc-windows-msvc amd64 "" "" windows
   tags:
@@ -170,7 +170,7 @@ android-armv7:
     - beta
     - tags
     - stable
-#    - triggers
+    - triggers
   script:
     - cargo build --target=armv7-linux-androideabi
   tags:
@@ -187,7 +187,7 @@ docker-build:
     - master
     - beta
     - stable
-#    - triggers
+    - triggers
   before_script:
     - docker info
   script:
