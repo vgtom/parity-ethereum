@@ -138,7 +138,7 @@ darwin:
     - stable
     - triggers
   script:
-    - mkdir homebrew && curl -L https://github.com/Homebrew/brew/tarball/master | tar xz --strip 1 -C homebrew
+    - /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
     - brew -v
     - brew install rhash
     - scripts/gitlab-build.sh x86_64-apple-darwin x86_64-apple-darwin macos gcc g++ macos
