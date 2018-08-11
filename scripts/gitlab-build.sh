@@ -179,7 +179,7 @@ case $BUILD_PLATFORM in
     strip_binaries
     calculate_checksums
     make_archive
-#    push_binaries
+    push_binaries
     ;;
   armv7-unknown-linux-gnueabihf)
     STRIP_BIN="arm-linux-gnueabihf-strip"
@@ -213,9 +213,9 @@ case $BUILD_PLATFORM in
     PLATFORM="x86_64-apple-darwin"
     build
     strip_binaries
-#    calculate_checksums
+    calculate_checksums
     make_archive
-#    push_binaries
+    push_binaries
 #    updater_push_release
     ;;
   x86_64-unknown-snap-gnu)
