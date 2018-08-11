@@ -213,7 +213,7 @@ case $BUILD_PLATFORM in
     PLATFORM="x86_64-apple-darwin"
     build
     strip_binaries
-    calculate_checksums
+#    calculate_checksums
     make_archive
 #    push_binaries
 #    updater_push_release
