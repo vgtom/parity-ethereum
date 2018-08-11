@@ -136,8 +136,9 @@ darwin:
     - beta
     - tags
     - stable
-#    - triggers
+    - triggers
   script:
+    - brew install rhash
     - scripts/gitlab-build.sh x86_64-apple-darwin x86_64-apple-darwin macos gcc g++ macos
   tags:
     - osx
