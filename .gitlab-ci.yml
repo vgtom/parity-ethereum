@@ -156,7 +156,7 @@ windows:
     - stable
     - triggers
   script:
-    - sh -version
+    - cargo clean
     - sh scripts/gitlab-build.sh x86_64-pc-windows-msvc x86_64-pc-windows-msvc amd64 "" "" windows
   tags:
    - rust-windows
