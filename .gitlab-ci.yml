@@ -56,6 +56,7 @@ centos-x86_64:
     - stable
     - triggers
   script:
+    - yum -y update glibc
     - scripts/gitlab-build.sh x86_64-centos x86_64-unknown-linux-gnu amd64 gcc g++ centos
   tags:
     - centos
@@ -154,7 +155,7 @@ windows:
     - beta
     - tags
     - stable
-    - triggers
+#    - triggers
   script:
     - sh scripts/gitlab-build.sh x86_64-pc-windows-msvc x86_64-pc-windows-msvc amd64 "" "" windows
   tags:
