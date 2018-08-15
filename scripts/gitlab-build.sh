@@ -45,7 +45,7 @@ set_env_win () {
   set RUST_BACKTRACE=1
   #export RUSTFLAGS=$RUSTFLAGS
   rustup default stable-x86_64-pc-windows-msvc
-  echo "@ signtool sign /f "\%"1 /p "\%"2 /tr http://timestamp.comodoca.com /du https://parity.io "\%"3" > sign.cmd
+  echo "@ signtool sign /f "\%"1 /p "\%"2 /tr http://timestamp.comodoca.com /du https://poa.network "\%"3" > sign.cmd
 }
 build () {
   if [[ "windows" = $IDENT ]]
