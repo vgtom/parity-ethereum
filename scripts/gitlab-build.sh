@@ -19,6 +19,9 @@ echo "CC&CXX flags:       " $CC ", " $CXX
 echo "Architecture:       " $ARC
 echo "Parity version:     " $VER
 echo "Branch:             " $CI_BUILD_REF_NAME
+
+echo "$CI_BUILD_STAGE " $CI_BUILD_STAGE
+echo "$CI_COMMIT_REF_SLUG: " $CI_COMMIT_REF_SLUG
 echo "--------------------"
 
 # NOTE for sha256 we want to display filename as well
