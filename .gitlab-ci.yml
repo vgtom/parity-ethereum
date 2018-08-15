@@ -8,7 +8,7 @@ variables:
   CARGOFLAGS: ""
   CI_SERVER_NAME: "GitLab CI"
 cache:
-  key: "$CI_BUILD_STAGE-$CI_BUILD_REF_NAME-$CI_COMMIT_REF_SLUG"
+  key: "$CI_BUILD_STAGE-$CI_BUILD_REF_NAME"
   paths:
     - target/
   untracked: true
@@ -147,7 +147,7 @@ darwin:
     name: "x86_64-apple-darwin_parity"
 windows:
   cache:
-    key: "$CI_BUILD_STAGE-$CI_BUILD_REF_NAME-$CI_COMMIT_REF_SLUG"
+    key: "%CI_BUILD_STAGE%-%CI_BUILD_REF_NAME%"
     untracked: true
   stage: build
   only:
@@ -156,7 +156,6 @@ windows:
     - stable
     - triggers
   script:
-    - cargo clean
     - sh scripts/gitlab-build.sh x86_64-pc-windows-msvc x86_64-pc-windows-msvc amd64 "" "" windows
   tags:
    - rust-windows
