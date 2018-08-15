@@ -258,7 +258,7 @@ case $BUILD_PLATFORM in
     EXT="exe"
     S3WIN=".exe"
     build
-#    sign_exe
+    sign_exe
     calculate_checksums
     make_archive
     push_binaries
