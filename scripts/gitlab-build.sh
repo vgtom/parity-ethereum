@@ -18,7 +18,10 @@ echo "Cargo target:       " $PLATFORM
 echo "CC&CXX flags:       " $CC ", " $CXX
 echo "Architecture:       " $ARC
 echo "Parity version:     " $VER
-echo "Branch:             " $CI_BUILD_REF_NAME
+echo "CI_BUILD_REF_NAME:  " $CI_BUILD_REF_NAME
+echo "CI_BUILD_REF:       " $CI_BUILD_REF
+echo "CI_BUILD_NAME:      " $CI_BUILD_NAME
+echo "CI_BUILD_ID:      " $CI_BUILD_ID
 
 echo "CI_BUILD_STAGE " $CI_BUILD_STAGE
 echo "CI_COMMIT_REF_SLUG: " $CI_COMMIT_REF_SLUG
