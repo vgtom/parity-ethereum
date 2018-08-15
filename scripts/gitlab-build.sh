@@ -20,8 +20,8 @@ echo "Architecture:       " $ARC
 echo "Parity version:     " $VER
 echo "Branch:             " $CI_BUILD_REF_NAME
 
-echo "$CI_BUILD_STAGE " $CI_BUILD_STAGE
-echo "$CI_COMMIT_REF_SLUG: " $CI_COMMIT_REF_SLUG
+echo "CI_BUILD_STAGE " $CI_BUILD_STAGE
+echo "CI_COMMIT_REF_SLUG: " $CI_COMMIT_REF_SLUG
 echo "--------------------"
 
 # NOTE for sha256 we want to display filename as well
@@ -140,6 +140,7 @@ push_binaries () {
 
 make_archive () {
   echo "add artifacts to archive"
+  echo "zip: " zip --version
   rm -rf parity.zip
   zip -r parity.zip target/$PLATFORM/release/parity$S3WIN target/$PLATFORM/release/parity-evm$S3WIN target/$PLATFORM/release/ethstore$S3WIN target/$PLATFORM/release/ethkey$S3WIN target/$PLATFORM/release/whisper$S3WIN parity$S3WIN.sha256 parity-evm$S3WIN.sha256 ethstore$S3WIN.sha256 ethkey$S3WIN.sha256 whisper$S3WIN.sha256
 }
