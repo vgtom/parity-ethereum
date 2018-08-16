@@ -59,6 +59,7 @@ build () {
   fi
   echo "Build parity:"
   if [[ "x86_64-centos" = $BUILD_PLATFORM ]]
+#  No exact target triple for CentOS, so build for the host platform
   then
   echo "x86_64-centos platform."
   cargo build --features final --release
@@ -70,7 +71,7 @@ build () {
   cargo build --release -p ethkey-cli
   echo "Build whisper-cli:"
   cargo build --release -p whisper-cli
-else
+  else
   cargo build --target $PLATFORM --features final --release
   echo "Build evmbin:"
   cargo build --target $PLATFORM --release -p evmbin
@@ -84,11 +85,11 @@ else
 }
 strip_binaries () {
   echo "Strip binaries:"
-    if [[ "x86_64-centos" = $BUILD_PLATFORM ]]
+  if [[ "x86_64-centos" = $BUILD_PLATFORM ]]
   then
   PLATFORM="."
   fi
-  echo "PLATFORM:" $PLATFORM
+  echo "PLATFORM folder:" $PLATFORM
   $STRIP_BIN -v target/$PLATFORM/release/parity
   $STRIP_BIN -v target/$PLATFORM/release/parity-evm
   $STRIP_BIN -v target/$PLATFORM/release/ethstore
@@ -143,7 +144,6 @@ push_binaries () {
 
 make_archive () {
   echo "add artifacts to archive"
-  echo "zip: " zip --version
   rm -rf parity.zip
   zip -r parity.zip target/$PLATFORM/release/parity$S3WIN target/$PLATFORM/release/parity-evm$S3WIN target/$PLATFORM/release/ethstore$S3WIN target/$PLATFORM/release/ethkey$S3WIN target/$PLATFORM/release/whisper$S3WIN parity$S3WIN.sha256 parity-evm$S3WIN.sha256 ethstore$S3WIN.sha256 ethkey$S3WIN.sha256 whisper$S3WIN.sha256
 }
@@ -157,7 +157,7 @@ updater_push_release () {
   # Kovan
   source scripts/safe_curl.sh $DATA "http://update.parity.io:1338/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
 }
-echo "check platform"
+
 case $BUILD_PLATFORM in
   x86_64-unknown-linux-gnu)
     #set strip bin

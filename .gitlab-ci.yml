@@ -8,7 +8,7 @@ variables:
   CARGOFLAGS: ""
   CI_SERVER_NAME: "GitLab CI"
 cache:
-  key: "$CI_BUILD_STAGE-$CI_BUILD_REF_NAME-$CI_COMMIT_REF_SLUG-$CI_BUILD_ID"
+  key: "$CI_BUILD_STAGE-$CI_BUILD_REF_NAME-$CI_BUILD_ID"
   paths:
     - target/
   untracked: true
@@ -56,7 +56,6 @@ centos-x86_64:
     - stable
     - triggers
   script:
-    - yum -y update glibc
     - scripts/gitlab-build.sh x86_64-centos x86_64-unknown-linux-gnu amd64 gcc g++ centos
   tags:
     - centos
@@ -122,7 +121,7 @@ linux-snap:
     - stable
     - beta
     - tags
-    - triggers
+#    - triggers
   script:
     - scripts/gitlab-build.sh x86_64-unknown-snap-gnu x86_64-unknown-linux-gnu amd64 gcc g++ snap
   tags:
@@ -148,7 +147,7 @@ darwin:
     name: "x86_64-apple-darwin_parity"
 windows:
   cache:
-    key: "%CI_BUILD_STAGE%-%CI_BUILD_REF_NAME%"
+    key: "%CI_BUILD_STAGE%-%CI_BUILD_REF_NAME%-%CI_BUILD_ID%"
     untracked: true
   stage: build
   only:
