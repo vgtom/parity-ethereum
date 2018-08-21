@@ -156,6 +156,10 @@ updater_push_release () {
   source scripts/safe_curl.sh $DATA "http://update.parity.io:1337/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
   # Kovan
   source scripts/safe_curl.sh $DATA "http://update.parity.io:1338/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
+  # Sokol
+  source scripts/safe_curl.sh $DATA "http://update.parity.io:1339/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
+
+
 }
 
 case $BUILD_PLATFORM in

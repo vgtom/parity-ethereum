@@ -43,6 +43,7 @@ pub enum SpecType {
 	Ellaism,
 	Easthub,
 	Social,
+	Sokol,
 	Dev,
 	Custom(String),
 }
@@ -63,6 +64,7 @@ impl str::FromStr for SpecType {
 			"morden" | "classic-testnet" => SpecType::Morden,
 			"ropsten" => SpecType::Ropsten,
 			"kovan" | "testnet" => SpecType::Kovan,
+			"sokol" => SpecType::Sokol,
 			"tobalaba" => SpecType::Tobalaba,
 			"olympic" => SpecType::Olympic,
 			"expanse" => SpecType::Expanse,
@@ -91,6 +93,7 @@ impl fmt::Display for SpecType {
 			SpecType::Easthub => "easthub",
 			SpecType::Social => "social",
 			SpecType::Kovan => "kovan",
+			SpecType::Sokol => "sokol",
 			SpecType::Tobalaba => "tobalaba",
 			SpecType::Dev => "dev",
 			SpecType::Custom(ref custom) => custom,
@@ -114,6 +117,7 @@ impl SpecType {
 			SpecType::Social => Ok(ethereum::new_social(params)),
 			SpecType::Tobalaba => Ok(ethereum::new_tobalaba(params)),
 			SpecType::Kovan => Ok(ethereum::new_kovan(params)),
+			SpecType::Sokol => Ok(ethereum::new_sokol(params)),
 			SpecType::Dev => Ok(Spec::new_instant()),
 			SpecType::Custom(ref filename) => {
 				let file = fs::File::open(filename).map_err(|e| format!("Could not load specification file at {}: {}", filename, e))?;

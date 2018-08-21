@@ -10,3 +10,6 @@ echo "Pushing release to Mainnet"
 
 echo "Pushing release to Kovan"
 ./scripts/safe_curl.sh $DATA "http://update.parity.io:1338/push-release/$CI_BUILD_REF_NAME/$CI_BUILD_REF"
+
+echo "Pushing release to Sokol"
+./scripts/safe_curl.sh $DATA "http://update.parity.io:1339/push-release/$CI_BUILD_REF_NAME/$CI_BUILD_REF"

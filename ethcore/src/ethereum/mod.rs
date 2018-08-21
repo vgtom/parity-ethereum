@@ -91,6 +91,11 @@ pub fn new_kovan<'a, T: Into<SpecParams<'a>>>(params: T) -> Spec {
 	load(params.into(), include_bytes!("../../res/ethereum/kovan.json"))
 }
 
+/// Create a new Sokol testnet chain spec.
+pub fn new_sokol<'a, T: Into<SpecParams<'a>>>(params: T) -> Spec {
+	load(params.into(), include_bytes!("../../res/ethereum/sokol.json"))
+}
+
 /// Create a new Foundation Ropsten chain spec.
 pub fn new_ropsten<'a, T: Into<SpecParams<'a>>>(params: T) -> Spec {
 	load(params.into(), include_bytes!("../../res/ethereum/ropsten.json"))
