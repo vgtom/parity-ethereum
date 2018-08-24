@@ -244,6 +244,7 @@ push-release:
   stage: push-release
   only:
   - tags
+  - triggers
   image: parity/rust:gitlab-ci
   script:
   - scripts/gitlab-push-release.sh
