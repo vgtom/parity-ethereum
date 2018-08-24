@@ -3,6 +3,8 @@
 set -e # fail on any error
 set -u # treat unset variables as error
 
+echo "Pushing release, url: " "http://update.parity.io:1339/push-release/"$CI_BUILD_REF_NAME"/"$CI_BUILD_REF
+
 DATA="secret=$RELEASES_SECRET"
 
 echo "Pushing release to Mainnet"

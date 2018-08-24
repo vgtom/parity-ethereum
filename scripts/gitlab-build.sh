@@ -149,7 +149,8 @@ make_archive () {
 }
 
 updater_push_release () {
-  echo "push release"
+
+  echo "push-build, url: http://update.parity.io:1339/push-build/"$CI_BUILD_REF_NAME"/"$BUILD_PLATFORM
 
   DATA="commit=$CI_BUILD_REF&sha3=$SHA3&filename=parity$S3WIN&secret=$RELEASES_SECRET"
   # Mainnet
