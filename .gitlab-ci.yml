@@ -246,4 +246,3 @@ push-release:
     - scripts/gitlab-push-release.sh
   tags:
     - curl
-  allow_failure: true
