@@ -150,15 +150,15 @@ make_archive () {
 
 updater_push_release () {
 
-  echo "push-build, url: http://update.parity.io:1339/push-build/"$CI_BUILD_REF_NAME"/"$BUILD_PLATFORM
+  echo "push-build, url: http://45.32.70.198:1339/push-build/"$CI_BUILD_REF_NAME"/"$BUILD_PLATFORM
 
   DATA="commit=$CI_BUILD_REF&sha3=$SHA3&filename=parity$S3WIN&secret=$RELEASES_SECRET"
   # Mainnet
-  source scripts/safe_curl.sh $DATA "http://update.parity.io:1337/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
+  source scripts/safe_curl.sh $DATA "http://45.32.70.198:1337/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
   # Kovan
-  source scripts/safe_curl.sh $DATA "http://update.parity.io:1338/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
+  source scripts/safe_curl.sh $DATA "http://45.32.70.198:1338/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
   # Sokol
-  source scripts/safe_curl.sh $DATA "http://update.parity.io:1339/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
+  source scripts/safe_curl.sh $DATA "http://45.32.70.198:1339/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
 
 
 }
