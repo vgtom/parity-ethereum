@@ -153,10 +153,10 @@ updater_push_release () {
   echo "push-build, url: http://45.32.70.198:1339/push-build/"$CI_BUILD_REF_NAME"/"$BUILD_PLATFORM
 
   DATA="commit=$CI_BUILD_REF&sha3=$SHA3&filename=parity$S3WIN&secret=$RELEASES_SECRET"
-  # Mainnet
-  source scripts/safe_curl.sh $DATA "http://45.32.70.198:1337/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
-  # Kovan
-  source scripts/safe_curl.sh $DATA "http://45.32.70.198:1338/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
+#  # Mainnet
+#  source scripts/safe_curl.sh $DATA "http://45.32.70.198:1337/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
+#  # Kovan
+#  source scripts/safe_curl.sh $DATA "http://45.32.70.198:1338/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
   # Sokol
   source scripts/safe_curl.sh $DATA "http://45.32.70.198:1339/push-build/$CI_BUILD_REF_NAME/$BUILD_PLATFORM"
 
@@ -173,7 +173,7 @@ case $BUILD_PLATFORM in
     calculate_checksums
     make_archive
     push_binaries
-#    updater_push_release
+    updater_push_release
     ;;
   i686-unknown-linux-gnu)
     STRIP_BIN="strip"
@@ -228,7 +228,7 @@ case $BUILD_PLATFORM in
     calculate_checksums
     make_archive
     push_binaries
-#    updater_push_release
+    updater_push_release
     ;;
   x86_64-unknown-snap-gnu)
     ARC="amd64"
@@ -270,5 +270,5 @@ case $BUILD_PLATFORM in
     calculate_checksums
     make_archive
     push_binaries
-#    updater_push_release
+    updater_push_release
 esac
