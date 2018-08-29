@@ -758,9 +758,7 @@ impl HeaderChain {
 	/// If there is a gap between the genesis and the rest
 	/// of the stored blocks, return the first post-gap block.
 	pub fn first_block(&self) -> Option<BlockDescriptor> {
-		info!(target: "updater", "first_block()");
 		let candidates = self.candidates.read();
-		info!(target: "updater", "candidates size: {:?}", candidates.iter().size_hint());
 		match candidates.iter().next() {
 			None | Some((&1, _)) => None,
 			Some((&height, entry)) => Some(BlockDescriptor {

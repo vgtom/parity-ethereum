@@ -384,7 +384,7 @@ impl ChainNotify for Informant<FullNodeInformantData> {
 				let header_view = block.header_view();
 				let size = block.rlp().as_raw().len();
 				let (skipped, skipped_txs) = (self.skipped.load(AtomicOrdering::Relaxed) + imported.len() - 1, self.skipped_txs.load(AtomicOrdering::Relaxed) + txs_imported);
-				info!(target: "import", "Imported v8 {} {} ({} txs, {} Mgas, {} ms, {} KiB){}",
+				info!(target: "import", "Imported {} {} ({} txs, {} Mgas, {} ms, {} KiB){}",
 					Colour::White.bold().paint(format!("#{}", header_view.number())),
 					Colour::White.bold().paint(format!("{}", header_view.hash())),
 					Colour::Yellow.bold().paint(format!("{}", block.transactions_count())),

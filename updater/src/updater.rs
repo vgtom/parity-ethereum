@@ -207,7 +207,6 @@ impl OperationsContractClient {
 	/// Get the hash of the latest release for the given track
 	fn latest_hash<F>(&self, track: ReleaseTrack, do_call: &F) -> Result<H256, String>
 	where F: Fn(Vec<u8>) -> Result<Vec<u8>, String> {
-		info!(target: "updater", "call operations latest_in_track(), CLIENT_ID_HASH: {:?}, track: {:?})", *CLIENT_ID_HASH, track);
 		self.operations_contract.functions()
 			.latest_in_track()
 			.call(*CLIENT_ID_HASH, u8::from(track), do_call)
@@ -222,16 +221,12 @@ impl OperationsContractClient {
 			.call(*CLIENT_ID_HASH, release_id, &do_call)
 			.map_err(|e| format!("{:?}", e))?;
 
-		info!(target: "updater", "release(release_id: {:?}, result: {:?}, {:?}, {:?}, {:?},", release_id, fork, track, semver, is_critical);
-
 		let (fork, track, semver) = (fork.low_u64(), track.low_u32(), semver.low_u32());
 
 		let latest_binary = self.operations_contract.functions()
 			.checksum()
 			.call(*CLIENT_ID_HASH, release_id, *PLATFORM_ID_HASH, &do_call)
 			.map_err(|e| format!("{:?}", e))?;
-
-		info!(target: "updater", "latest_binary: {:?}, PLATFORM_ID_HASH: {:?}", latest_binary, *PLATFORM_ID_HASH);
 
 		Ok(ReleaseInfo {
 			version: VersionInfo::from_raw(semver, track as u8, release_id.into()),
@@ -244,9 +239,7 @@ impl OperationsContractClient {
 
 impl OperationsClient for OperationsContractClient {
 	fn latest(&self, this: &VersionInfo, track: ReleaseTrack) -> Result<OperationsInfo, String> {
-		info!(target: "updater", "latest(), track: {:?}", track);
 		if track == ReleaseTrack::Unknown {
-			info!(target: "updater", "ReleaseTrack is unknown, return");
 			return Err(format!("Current executable ({}) is unreleased.", this.hash));
 		}
 
@@ -255,7 +248,7 @@ impl OperationsClient for OperationsContractClient {
 		info!(target: "updater", "operations address: {:?}", address);
 		let do_call = |data| client.call_contract(BlockId::Latest, address, data).map_err(|e| format!("{:?}", e));
 
-		info!(target: "updater", "Looking up this_fork for our release: {}/{:?}", CLIENT_ID, this.hash);
+		trace!(target: "updater", "Looking up this_fork for our release: {}/{:?}", CLIENT_ID, this.hash);
 
 		// get the fork number of this release
 		let this_fork = self.operations_contract.functions()
@@ -305,7 +298,6 @@ impl OperationsClient for OperationsContractClient {
 	}
 
 	fn release_block_number(&self, from: BlockNumber, release: &ReleaseInfo) -> Option<BlockNumber> {
-		info!(target: "updater", "release_block_number()");
 		let client = self.client.upgrade()?;
 		let address = client.registry_address("operations".into(), BlockId::Latest)?;
 
@@ -407,7 +399,6 @@ impl Updater {
 	}
 
 	fn update_file_name(v: &VersionInfo) -> String {
-		info!(target: "updater", "update_file_name()");
 		format!("parity-{}.{}.{}-{:x}", v.version.major, v.version.minor, v.version.patch, v.hash)
 	}
 }
@@ -415,7 +406,6 @@ impl Updater {
 impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O, F, T, R> {
 	/// Set a closure to call when we want to restart the client
 	pub fn set_exit_handler<G>(&self, g: G) where G: Fn() + 'static + Send {
-		info!(target: "updater", "set_exit_handler()");
 		*self.exit_handler.lock() = Some(Box::new(g));
 	}
 
@@ -430,17 +420,14 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O,
 	}
 
 	fn updates_path(&self, name: &str) -> PathBuf {
-		info!(target: "updater", "updates_path()");
 		self.update_policy.path.join(name)
 	}
 
 	fn on_fetch(&self, latest: &OperationsInfo, res: Result<PathBuf, fetch::Error>) {
-		info!(target: "updater", "on_fetch()");
 		let mut state = self.state.lock();
 
 		// Bail out if the latest release has changed in the meantime
 		if state.latest.as_ref() != Some(&latest) {
-			info!(target: "updater", "the latest release has changed in the meantime");
 			return;
 		}
 
@@ -449,7 +436,6 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O,
 			match res {
 				// We've successfully fetched the binary
 				Ok(path) => {
-					info!(target: "updater", "Fetching");
 					let setup = |path: &Path| -> Result<(), String> {
 						let dest = self.updates_path(&Updater::update_file_name(&release.version));
 						if !dest.exists() {
@@ -488,7 +474,6 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O,
 	}
 
 	fn execute_upgrade(&self, mut state: MutexGuard<UpdaterState>) -> bool {
-		info!(target: "updater", "execute_upgrade()");
 		if let UpdaterStatus::Ready { ref release } = state.status.clone() {
 			let file = Updater::update_file_name(&release.version);
 			let path = self.updates_path("latest");
@@ -517,7 +502,6 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O,
 	}
 
 	fn updater_step(&self, mut state: MutexGuard<UpdaterState>) {
-		info!(target: "updater", "updater_step()");
 		let current_block_number = self.client.upgrade().map_or(0, |c| c.block_number(BlockId::Latest).unwrap_or(0));
 
 		if let Some(latest) = state.latest.clone() {
@@ -585,8 +569,6 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O,
 						// Bail out if we're already running the latest version or a later one
 						if running_later || running_latest {
 							info!(target: "updater", "already running the latest version or a later one");
-							info!(target: "updater", " latest.track.version.version {:?} self.version_info().version  {:?} ", latest.track.version.version, self.version_info().version);
-							info!(target: "updater", " state.status latest.track.version.hash {:?} self.version_info().hash  {:?} ", latest.track.version.hash, self.version_info().hash);
 							return;
 						}
 
@@ -619,7 +601,6 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O,
 							if update_block_number > current_block_number {
 								info!(target: "updater", "Update for binary {} will be triggered at block {}", binary, update_block_number);
 							} else {
-								info!(target: "updater", " state.status update_block_number < current_block_number, so next update step");
 								self.updater_step(state);
 							}
 						}
@@ -630,7 +611,7 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O,
 	}
 
 	fn poll(&self) {
-		info!(target: "updater", " poll(), current release is {}, hash: {:?}, track: {:?}, version: {:?}", self.this, self.this.hash, self.this.track, self.this.version);
+		trace!(target: "updater", "Current release is {} ({:?})", self.this, self.this.hash);
 
 		// We rely on a secure state. Bail if we're unsure about it.
 		if !cfg!(feature = "test-updater") {
@@ -643,7 +624,6 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O,
 		// Only check for updates every n blocks
 		let current_block_number = self.client.upgrade().map_or(0, |c| c.block_number(BlockId::Latest).unwrap_or(0));
 
-		info!(target: "updater", "current_block_number: {:?}", current_block_number);
 		if !cfg!(feature = "test-updater") {
 			if current_block_number % cmp::max(self.update_policy.frequency, 1) != 0 {
 				info!(target: "updater", "too soon, so return");
@@ -658,42 +638,35 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O,
 		info!(target: "updater", "latest release from operations: {:?}", latest);
 		if let Some(latest) = latest {
 			// Update current capability
-			info!(target: "updater", "Update current capability");
 			state.capability = match latest.this_fork {
 				// We're behind the latest fork. Now is the time to be upgrading, perhaps we're too late...
 				Some(this_fork) if this_fork < latest.fork => {
-					info!(target: "updater", "release fork < then our");
 					if current_block_number >= latest.fork - 1 {
-						info!(target: "updater", "We're at (or past) the last block we can import. Disable the client. ");
 						// We're at (or past) the last block we can import. Disable the client.
 						if self.update_policy.require_consensus {
-							info!(target: "updater", "check update_policy require_consensus");
 							if let Some(c) = self.client.upgrade() {
-								info!(target: "updater", "so disable client");
 								c.disable();
 							}
 						}
-						info!(target: "updater", "Incapable since latest fork");
+
 						CapState::IncapableSince(latest.fork)
 					} else {
-						info!(target: "updater", "Capable ");
 						CapState::CapableUntil(latest.fork)
 					}
-				}
+				},
 				Some(_) => CapState::Capable,
 				None => CapState::Unknown,
 			};
-			info!(target: "updater", "latest release : {:?}", state.latest.as_ref());
 
 			// There's a new release available
 			if state.latest.as_ref() != Some(&latest) {
-				info!(target: "updater", "Latest release in our track is v{} it is {}critical ({} binary is {})",
+				trace!(target: "updater", "Latest release in our track is v{} it is {}critical ({} binary is {})",
 					latest.track.version,
 					if latest.track.is_critical {""} else {"non-"},
 					*PLATFORM,
 					latest.track.binary.map_or_else(|| "unreleased".into(), |b| format!("{}", b)));
 
-				info!(target: "updater", "Fork: this/current/latest/latest-known: {}/#{}/#{}/#{}",
+				trace!(target: "updater", "Fork: this/current/latest/latest-known: {}/#{}/#{}/#{}",
 					latest.this_fork.map_or_else(|| "unknown".into(), |f| format!("#{}", f)),
 					current_block_number,
 					latest.track.fork,
@@ -723,7 +696,6 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Service fo
 	}
 
 	fn upgrade_ready(&self) -> Option<ReleaseInfo> {
-		info!(target: "updater", "upgrade_ready()");
 		match self.state.lock().status {
 			UpdaterStatus::Ready { ref release, .. } => Some(release.clone()),
 			_ => None,

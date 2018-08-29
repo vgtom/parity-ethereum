@@ -547,7 +547,6 @@ impl BlockChain {
 				let header = block.header_view();
 				let hash = block.hash();
 
-				info!(target: "updater", "search best_block_hash");
 				let details = BlockDetails {
 					number: header.number(),
 					total_difficulty: header.difficulty(),
@@ -604,10 +603,8 @@ impl BlockChain {
 			}
 
 			// binary search for the first block.
-			info!(target: "updater", "search best_block_hash. raw_first: {:?}", raw_first);
 			match raw_first {
 				None => {
-					info!(target: "updater", "raw_first is none");
 					let (mut f, mut hash) = (best_block_number, best_block_hash);
 					let mut l = best_ancient_number.unwrap_or(0);
 
@@ -623,9 +620,8 @@ impl BlockChain {
 						}
 					}
 
-					info!(target: "updater", "hash: {:?}, bc.genesis_hash(): {:?}, raw_first(): {:?}", hash, bc.genesis_hash(), raw_first);
 					if hash != bc.genesis_hash() {
-						info!("First block calculated: {:?}", hash);
+						trace!("First block calculated: {:?}", hash);
 						let mut batch = db.key_value().transaction();
 						batch.put(db::COL_EXTRA, b"first", &hash);
 						db.key_value().write(batch).expect("Low level database error when writing 'first' block. Some issue with disk?");
@@ -633,11 +629,9 @@ impl BlockChain {
 					}
 				},
 				Some(raw_first) => {
-					info!(target: "updater", "raw_first is some, bc.first_block: {:?}", bc.first_block);
 					bc.first_block = Some(H256::from_slice(&raw_first));
 				},
 			}
-			info!(target: "updater", "finally bc.first_block: {:?}", bc.first_block);
 
 			// and write them
 			if let (Some(hash), Some(number)) = (best_ancient, best_ancient_number) {
