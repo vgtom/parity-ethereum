@@ -33,7 +33,7 @@ RUN apt-get update && \
 # show backtraces
  RUST_BACKTRACE=1 && \
 # build parity
-cd /build&&git clone https://github.com/paritytech/parity-ethereum && \
+cd /build&&git clone https://github.com/poanetwork/parity-ethereum && \
         cd parity-ethereum&& \
 	git pull&& \
 	git checkout $BUILD_TAG && \
