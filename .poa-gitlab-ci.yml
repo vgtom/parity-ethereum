@@ -182,6 +182,7 @@ android-armv7:
     name: "armv7-linux-androideabi_parity"
 docker-build:
   stage: build
+  image: docker:stable
   only:
   - tags
   - master
