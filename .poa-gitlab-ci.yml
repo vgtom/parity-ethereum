@@ -189,6 +189,8 @@ docker-build:
   - beta
   - stable
   - triggers
+  services:
+  - docker:dind
   before_script:
   - echo $(hostname)
   - echo $(pwd)
