@@ -37,8 +37,11 @@ linux-i686:
   - beta
   - tags
   - stable
-#  - triggers
+  - triggers
   script:
+  - echo $(hostname)
+  - echo $(pwd)
+  - echo $(whoami)
   - scripts/gitlab-build.sh i686-unknown-linux-gnu i686-unknown-linux-gnu i386 gcc g++ linux
   tags:
   - rust-i686
@@ -71,8 +74,11 @@ linux-armv7:
   - beta
   - tags
   - stable
-#  - triggers
+  - triggers
   script:
+  - echo $(hostname)
+  - echo $(pwd)
+  - echo $(whoami)
   - scripts/gitlab-build.sh armv7-unknown-linux-gnueabihf armv7-unknown-linux-gnueabihf armhf arm-linux-gnueabihf-gcc arm-linux-gnueabihf-g++ linux
   tags:
   - rust-arm
@@ -105,8 +111,11 @@ linux-aarch64:
   - beta
   - tags
   - stable
-  # - triggers
+  - triggers
   script:
+  - echo $(hostname)
+  - echo $(pwd)
+  - echo $(whoami)
   - scripts/gitlab-build.sh aarch64-unknown-linux-gnu aarch64-unknown-linux-gnu arm64 aarch64-linux-gnu-gcc aarch64-linux-gnu-g++ linux
   tags:
   - rust-arm
@@ -182,18 +191,12 @@ android-armv7:
     name: "armv7-linux-androideabi_parity"
 docker-build:
   stage: build
-  image: docker:stable
-  variables:
-    DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
   only:
   - tags
   - master
   - beta
   - stable
   - triggers
-  services:
-  - docker:dind
   before_script:
   - echo $(hostname)
   - echo $(pwd)
