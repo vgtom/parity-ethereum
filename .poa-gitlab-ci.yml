@@ -187,8 +187,11 @@ docker-build:
   - master
   - beta
   - stable
-  #    - triggers
+  - triggers
   before_script:
+  - echo $(hostname)
+  - echo $(pwd)
+  - echo $(whoami)
   - docker info
   script:
   - if [ "$CI_BUILD_REF_NAME" == "master" ]; then DOCKER_TAG="latest"; else DOCKER_TAG=$CI_BUILD_REF_NAME; fi
@@ -244,7 +247,7 @@ push-release:
   stage: push-release
   only:
   - tags
-  - triggers
+#  - triggers
   image: parity/rust:gitlab-ci
   script:
   - scripts/gitlab-push-release.sh
