@@ -249,14 +249,14 @@ docker-build:
 #  - rust
 #  - rust-nightly
 #  allow_failure: true
-push-release:
-  stage: push-release
-  only:
-  - tags
-#  - triggers
-  image: parity/rust:gitlab-ci
-  script:
-  - scripts/gitlab-push-release.sh
-  tags:
-  - curl
-  allow_failure: true
+#push-release:
+#  stage: push-release
+#  only:
+#  - tags
+##  - triggers
+#  image: parity/rust:gitlab-ci
+#  script:
+#  - scripts/gitlab-push-release.sh
+#  tags:
+#  - curl
+#  allow_failure: true
