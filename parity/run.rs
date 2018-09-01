@@ -43,7 +43,7 @@ use journaldb::Algorithm;
 use light::Cache as LightDataCache;
 use miner::external::ExternalMiner;
 use node_filter::NodeFilter;
-use parity_reactor::EventLoop;
+use parity_reactor::{EventLoop, Runtime};
 use parity_rpc::{Origin, Metadata, NetworkSettings, informant, is_major_importing};
 use updater::{UpdatePolicy, Updater};
 use parity_version::version;
@@ -485,7 +485,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	let event_loop = EventLoop::spawn();
 
 	// Create Tokio runtime:
-	let runtime =
+	let mut runtime = Runtime::new();
 
 	let hdb_bind_address = "localhost:6000"
         .to_socket_addrs()

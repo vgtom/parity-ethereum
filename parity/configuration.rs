@@ -1449,6 +1449,7 @@ mod tests {
 			on_demand_retry_count: None,
 			on_demand_inactive_time_limit: None,
 			hydrabadger: HydrabadgerConfig::new(),
+			hbbft: HbbftConfig::default(),
 		};
 		expected.secretstore_conf.enabled = cfg!(feature = "secretstore");
 		expected.secretstore_conf.http_enabled = cfg!(feature = "secretstore");

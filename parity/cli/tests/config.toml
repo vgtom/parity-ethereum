@@ -87,3 +87,7 @@ unsafe_expose = false
 [whisper]
 enabled = true
 pool_size = 50
+
+[hbbft]
+port = 5910
+interface = "local"
