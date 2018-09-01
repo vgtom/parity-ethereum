@@ -476,10 +476,16 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	// prepare account provider
 	let account_provider = Arc::new(prepare_account_provider(&cmd.spec, &cmd.dirs, &spec.data_dir, cmd.acc_conf, &passwords)?);
 
+	// TODO: Remove: Superseded by `Runtime`.
 	let cpu_pool = CpuPool::new(4);
 
 	// spin up event loop
+	//
+	// TODO: Remove: Superseded by `Runtime`.
 	let event_loop = EventLoop::spawn();
+
+	// Create Tokio runtime:
+	let runtime =
 
 	let hdb_bind_address = "localhost:6000"
         .to_socket_addrs()

@@ -83,10 +83,10 @@ mod tests {
 	use serde_json;
 	use hash::Address;
 	use spec::validator_set::ValidatorSet;
-	use spec::authority_round::Hbbft;
+	use spec::hbbft::Hbbft;
 
 	#[test]
-	fn authority_round_deserialization() {
+	fn hbbft_deserialization() {
 		let s = r#"{
 			"params": {
 				"stepDuration": "0x02",
