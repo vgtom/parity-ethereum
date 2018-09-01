@@ -485,7 +485,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	let event_loop = EventLoop::spawn();
 
 	// Create Tokio runtime:
-	let mut runtime = Runtime::new();
+	let mut runtime = Runtime::new().map_err(|e| format!("Tokio runtime failed to start: {:?}", e))?;
 
 	let hdb_bind_address = "localhost:6000"
         .to_socket_addrs()
@@ -493,7 +493,8 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
         .next().unwrap();
 
 	// Hydrabadger
-	let _hdb = Hydrabadger::with_defaults(hdb_bind_address);
+	let hdb = Hydrabadger::with_defaults(hdb_bind_address);
+	runtime.spawn(hdb.clone().node(None, None));
 
 	// fetch service
 	let fetch = fetch::Client::new().map_err(|e| format!("Error starting fetch client: {:?}", e))?;
@@ -833,7 +834,9 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 			informant,
 			client,
 			client_service: Arc::new(service),
-			keep_alive: Box::new((watcher, updater, ws_server, http_server, ipc_server, secretstore_key_server, ipfs_server, event_loop)),
+			keep_alive: Box::new((watcher, updater, ws_server, http_server, ipc_server, secretstore_key_server,
+				ipfs_server, event_loop)),
+			runtime,
 		}
 	})
 }
@@ -859,6 +862,7 @@ enum RunningClientInner {
 		client: Arc<Client>,
 		client_service: Arc<ClientService>,
 		keep_alive: Box<Any>,
+		runtime: Runtime,
 	},
 }
 
@@ -883,6 +887,8 @@ impl RunningClient {
 
 	/// Shuts down the client.
 	pub fn shutdown(self) {
+		use futures::Future;
+
 		match self.inner {
 			RunningClientInner::Light { rpc, informant, client, keep_alive } => {
 				// Create a weak reference to the client so that we can wait on shutdown
@@ -895,7 +901,7 @@ impl RunningClient {
 				drop(client);
 				wait_for_drop(weak_client);
 			},
-			RunningClientInner::Full { rpc, informant, client, client_service, keep_alive } => {
+			RunningClientInner::Full { rpc, informant, client, client_service, keep_alive, runtime } => {
 				info!("Finishing work, please wait...");
 				// Create a weak reference to the client so that we can wait on shutdown
 				// until it is dropped
@@ -906,6 +912,7 @@ impl RunningClient {
 				// drop this stuff as soon as exit detected.
 				drop(rpc);
 				drop(keep_alive);
+				runtime.shutdown_now().wait().ok();
 				// to make sure timer does not spawn requests while shutdown is in progress
 				informant.shutdown();
 				// just Arc is dropping here, to allow other reference release in its default time
