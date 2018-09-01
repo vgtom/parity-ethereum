@@ -1,6 +1,6 @@
 stages:
-#- test
-#- push-release
+- test
+- push-release
 - build
 variables:
   RUST_BACKTRACE: "1"
@@ -210,56 +210,56 @@ docker-build:
   - docker logout
   tags:
   - docker
-#test-coverage:
-#  stage: test
-#  only:
-#  - master
-#  - natlg-build-test
-#  script:
-#  - scripts/gitlab-test.sh test-coverage
-#  tags:
-#  - kcov
-#  allow_failure: true
-#test-rust-stable:
-#  stage: test
-#  image: parity/rust:gitlab-ci
-#  script:
-#  - scripts/gitlab-test.sh stable
-#  tags:
-#  - rust-stable
-#test-rust-beta:
-#  stage: test
-#  only:
-#  #  - triggers
-#  - master
-#  - natlg-build-test
-#  image: parity/rust:gitlab-ci
-#  script:
-#  - scripts/gitlab-test.sh beta
-#  tags:
-#  - rust-beta
-#  allow_failure: true
-#test-rust-nightly:
-#  stage: test
-#  only:
-#  #  - triggers
-#  - master
-#  - natlg-build-test
-#  image: parity/rust:gitlab-ci
-#  script:
-#  - scripts/gitlab-test.sh nightly
-#  tags:
-#  - rust
-#  - rust-nightly
-#  allow_failure: true
-#push-release:
-#  stage: push-release
-#  only:
-#  - tags
-##  - triggers
-#  image: parity/rust:gitlab-ci
-#  script:
-#  - scripts/gitlab-push-release.sh
-#  tags:
-#  - curl
-#  allow_failure: true
+test-coverage:
+  stage: test
+  only:
+  - master
+  - natlg-build-test
+  script:
+  - scripts/gitlab-test.sh test-coverage
+  tags:
+  - kcov
+  allow_failure: true
+test-rust-stable:
+  stage: test
+  image: parity/rust:gitlab-ci
+  script:
+  - scripts/gitlab-test.sh stable
+  tags:
+  - rust-stable
+test-rust-beta:
+  stage: test
+  only:
+  - triggers
+  - master
+  - natlg-build-test
+  image: parity/rust:gitlab-ci
+  script:
+  - scripts/gitlab-test.sh beta
+  tags:
+  - rust-beta
+  allow_failure: true
+test-rust-nightly:
+  stage: test
+  only:
+  - triggers
+  - master
+  - natlg-build-test
+  image: parity/rust:gitlab-ci
+  script:
+  - scripts/gitlab-test.sh nightly
+  tags:
+  - rust
+  - rust-nightly
+  allow_failure: true
+push-release:
+  stage: push-release
+  only:
+  - tags
+#  - triggers
+  image: parity/rust:gitlab-ci
+  script:
+  - scripts/gitlab-push-release.sh
+  tags:
+  - curl
+  allow_failure: true
