@@ -22,7 +22,7 @@ parts:
   desktop-icon:
     source: ./snap
     plugin: nil
-	override-build: |
+    override-build: |
       mkdir -p $SNAPCRAFT_PART_INSTALL/usr/share/applications
       mkdir -p $SNAPCRAFT_PART_INSTALL/usr/share/pixmaps
       cp -v gui/parity.desktop $SNAPCRAFT_PART_INSTALL/usr/share/applications/

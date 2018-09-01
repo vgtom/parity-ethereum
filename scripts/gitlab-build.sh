@@ -238,12 +238,17 @@ case $BUILD_PLATFORM in
     snapcraft clean
     echo "Prepare snapcraft.yaml for build on Gitlab CI in Docker image"
     sed -i 's/git/'"$VER"'/g' snap/snapcraft.yaml
+    echo "Check build ref name"
     if [[ "$CI_BUILD_REF_NAME" = "stable" || "$CI_BUILD_REF_NAME" = "beta" || "$VER" == *1.11* || "$VER" == *2.0* ]];
       then
+       echo "Build is stable"
         sed -i -e 's/grade: devel/grade: stable/' snap/snapcraft.yaml;
     fi
+    echo "Move snapcraft.yaml"
     mv -f snap/snapcraft.yaml snapcraft.yaml
+    echo "Delete snapcraft.yaml"
     snapcraft -d
+    echo "Login to snapcraft:"
     snapcraft_login=$(expect -c "
       spawn snapcraft login
       expect \"Email:\"
@@ -254,6 +259,7 @@ case $BUILD_PLATFORM in
       ")
     echo "$snapcraft_login"
     snapcraft push "parity_"$VER"_amd64.snap"
+    echo "Snapcraft status"
     snapcraft status parity
     snapcraft logout
     $SHA256_BIN "parity_"$VER"_amd64.snap" > "parity_"$VER"_amd64.snap.sha256"
