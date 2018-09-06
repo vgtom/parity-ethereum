@@ -19,8 +19,6 @@ use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 use std::thread;
 
-use std::net::ToSocketAddrs;
-
 use ansi_term::Colour;
 use bytes::Bytes;
 use ethcore::account_provider::{AccountProvider, AccountProviderSettings};
@@ -35,7 +33,7 @@ use ethcore_service::ClientService;
 use ethereum_types::Address;
 use sync::{self, SyncConfig};
 use miner::work_notify::WorkPoster;
-use futures::IntoFuture;
+use futures::{future, IntoFuture};
 use futures_cpupool::CpuPool;
 use hash_fetch::{self, fetch};
 use informant::{Informant, LightNodeInformantData, FullNodeInformantData};
@@ -67,8 +65,8 @@ use secretstore;
 use signer;
 use db;
 use ethkey::Password;
-use hbbft::HbbftConfig;
-use hydrabadger::Hydrabadger;
+use hbbft::{self, HbbftConfig};
+use hydrabadger::{Hydrabadger};
 
 // how often to take periodic snapshots.
 const SNAPSHOT_PERIOD: u64 = 5000;
@@ -476,6 +474,9 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	// prepare account provider
 	let account_provider = Arc::new(prepare_account_provider(&cmd.spec, &cmd.dirs, &spec.data_dir, cmd.acc_conf, &passwords)?);
 
+	// Create Tokio runtime:
+	let mut runtime = Runtime::new().map_err(|e| format!("Tokio runtime failed to start: {:?}", e))?;
+
 	// TODO: Remove: Superseded by `Runtime`.
 	let cpu_pool = CpuPool::new(4);
 
@@ -484,17 +485,24 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	// TODO: Remove: Superseded by `Runtime`.
 	let event_loop = EventLoop::spawn();
 
-	// Create Tokio runtime:
-	let mut runtime = Runtime::new().map_err(|e| format!("Tokio runtime failed to start: {:?}", e))?;
+	// set up bootnodes
+	let mut net_conf = cmd.net_conf;
+	if !cmd.custom_bootnodes {
+		net_conf.boot_nodes = spec.nodes.clone();
+	}
 
-	let hdb_bind_address = "localhost:6000"
-        .to_socket_addrs()
-        .expect("Invalid bind address")
-        .next().unwrap();
+	info!("###### BOOT NODES: \n{:?}", net_conf.boot_nodes);
+	info!("###### RESERVED NODES: \n{:?}", net_conf.reserved_nodes);
 
 	// Hydrabadger
-	let hdb = Hydrabadger::with_defaults(hdb_bind_address);
-	runtime.spawn(hdb.clone().node(None, None));
+	let hdb = Hydrabadger::new(cmd.hbbft.bind_address, cmd.hbbft.to_hydrabadger());
+	let hdb_peers = hbbft::to_peer_addrs(&net_conf);
+	info!("###### HDB PEERS: {:?}", hdb_peers);
+	runtime.spawn(future::lazy(move || {
+		let fut = hdb.clone().node(Some(hdb_peers));
+		info!("Hydrabadger task spawned.");
+		fut
+	}));
 
 	// fetch service
 	let fetch = fetch::Client::new().map_err(|e| format!("Error starting fetch client: {:?}", e))?;
@@ -560,12 +568,6 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	client_config.queue.verifier_settings = cmd.verifier_settings;
 	client_config.transaction_verification_queue_size = ::std::cmp::max(2048, txpool_size / 4);
 	client_config.snapshot = cmd.snapshot_conf.clone();
-
-	// set up bootnodes
-	let mut net_conf = cmd.net_conf;
-	if !cmd.custom_bootnodes {
-		net_conf.boot_nodes = spec.nodes.clone();
-	}
 
 	// set network path.
 	net_conf.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());

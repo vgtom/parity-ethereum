@@ -1,4 +1,9 @@
+use std::str::FromStr;
+use std::collections::HashSet;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+use sync::{Node, NetworkConfiguration};
+// use network;
+use hydrabadger::Config as HydrabadgerConfig;
 
 pub const DEFAULT_HBBFT_PORT: u16 = 5900;
 
@@ -19,7 +24,7 @@ const DEFAULT_OUTPUT_EXTRA_DELAY_MS: u64 = 0;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HbbftConfig {
     pub bind_address: SocketAddr,
-    pub remote_addresses: Vec<SocketAddr>,
+    // pub remote_addresses: HashSet<SocketAddr>,
     pub batch_size: usize,
     pub txn_gen_count: usize,
     pub txn_gen_interval: u64,
@@ -29,11 +34,24 @@ pub struct HbbftConfig {
     pub output_extra_delay_ms: u64,
 }
 
+impl HbbftConfig {
+    pub fn to_hydrabadger(&self) -> HydrabadgerConfig {
+        HydrabadgerConfig {
+            batch_size: self.batch_size,
+            txn_gen_count: self.txn_gen_count,
+            txn_gen_interval: self.txn_gen_interval,
+            txn_gen_bytes: self.txn_gen_bytes,
+            keygen_peer_count: self.keygen_peer_count,
+            output_extra_delay_ms: self.output_extra_delay_ms,
+        }
+    }
+}
+
 impl Default for HbbftConfig {
     fn default() -> HbbftConfig {
         HbbftConfig {
             bind_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), DEFAULT_HBBFT_PORT),
-            remote_addresses: Vec::new(),
+            // remote_addresses: HashSet::new(),
             batch_size: DEFAULT_BATCH_SIZE,
             txn_gen_count: DEFAULT_TXN_GEN_COUNT,
             txn_gen_interval: DEFAULT_TXN_GEN_INTERVAL,
@@ -42,4 +60,25 @@ impl Default for HbbftConfig {
             output_extra_delay_ms: DEFAULT_OUTPUT_EXTRA_DELAY_MS,
         }
     }
+}
+
+impl From<HbbftConfig> for HydrabadgerConfig {
+    fn from(cfg: HbbftConfig) ->  HydrabadgerConfig {
+        HydrabadgerConfig {
+            batch_size: cfg.batch_size,
+            txn_gen_count: cfg.txn_gen_count,
+            txn_gen_interval: cfg.txn_gen_interval,
+            txn_gen_bytes: cfg.txn_gen_bytes,
+            keygen_peer_count: cfg.keygen_peer_count,
+            output_extra_delay_ms: cfg.output_extra_delay_ms,
+        }
+    }
+}
+
+
+/// Creates a list of socket addresses using defined boot and reserved nodes .
+pub fn to_peer_addrs(net_conf: &NetworkConfiguration) -> HashSet<SocketAddr> {
+    net_conf.boot_nodes.iter().chain(net_conf.reserved_nodes.iter()).filter_map(|node_str| {
+        Node::from_str(node_str).ok().map(|node| node.endpoint.address)
+    }).collect()
 }
