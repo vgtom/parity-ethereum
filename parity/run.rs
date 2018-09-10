@@ -65,7 +65,7 @@ use secretstore;
 use signer;
 use db;
 use ethkey::Password;
-use hbbft::{self, HbbftConfig};
+use hbbft::HbbftConfig;
 use hydrabadger::{Hydrabadger};
 
 // how often to take periodic snapshots.
@@ -491,13 +491,14 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 		net_conf.boot_nodes = spec.nodes.clone();
 	}
 
-	info!("###### BOOT NODES: \n{:?}", net_conf.boot_nodes);
-	info!("###### RESERVED NODES: \n{:?}", net_conf.reserved_nodes);
+	// info!("###### BOOT NODES: \n{:?}", net_conf.boot_nodes);
+	// info!("###### RESERVED NODES: \n{:?}", net_conf.reserved_nodes);
 
 	// Hydrabadger
 	let hdb = Hydrabadger::new(cmd.hbbft.bind_address, cmd.hbbft.to_hydrabadger());
-	let hdb_peers = hbbft::to_peer_addrs(&net_conf);
-	info!("###### HDB PEERS: {:?}", hdb_peers);
+	// let hdb_peers = hbbft::to_peer_addrs(&net_conf);
+	let hdb_peers = cmd.hbbft.remote_addresses.clone();
+	// info!("###### HDB PEERS: {:?}", hdb_peers);
 	runtime.spawn(future::lazy(move || {
 		let fut = hdb.clone().node(Some(hdb_peers));
 		info!("Hydrabadger task spawned.");

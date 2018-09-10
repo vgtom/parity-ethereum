@@ -1102,9 +1102,13 @@ usage! {
 			// "Specifies the local address for the hydrabadger hbbft node to listen on.",
 			"Specifies the IP address upon which the hydrabadger hbbft node will listen. Use 'local' for localhost.",
 
-			ARG arg_hbbft_bind_address: (Option<String>) = None, or |c: &Config| c.hbbft.as_ref()?.bind_address.clone(),
-			"--hbbft-bind-address=[HOST:PORT]",
-			"Specifies the local address for the hydrabadger hbbft node to listen on.",
+			// ARG arg_hbbft_bind_address: (Option<String>) = None, or |c: &Config| c.hbbft.as_ref()?.bind_address.clone(),
+			// "--hbbft-bind-address=[HOST:PORT]",
+			// "Specifies the local address for the hydrabadger hbbft node to listen on.",
+
+			ARG arg_hbbft_remote_addresses: (Option<String>) = None, or |c: &Config| c.hbbft.as_ref()?.remote_addresses.as_ref().map(|vec| vec.join(",")),
+			"--hbbft-remote-addresses=[NODES]",
+			"Specify remote addresses to connect to upon startup. This is equivalent to bootnodes. NODES should be comma-delimited socket addresses.",
 	}
 }
 
@@ -1408,6 +1412,7 @@ struct Hbbft {
 	port: Option<u16>,
 	interface: Option<String>,
 	bind_address: Option<String>,
+	remote_addresses: Option<Vec<String>>,
 }
 
 #[cfg(test)]

@@ -24,7 +24,7 @@ const DEFAULT_OUTPUT_EXTRA_DELAY_MS: u64 = 0;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HbbftConfig {
     pub bind_address: SocketAddr,
-    // pub remote_addresses: HashSet<SocketAddr>,
+    pub remote_addresses: HashSet<SocketAddr>,
     pub batch_size: usize,
     pub txn_gen_count: usize,
     pub txn_gen_interval: u64,
@@ -51,7 +51,7 @@ impl Default for HbbftConfig {
     fn default() -> HbbftConfig {
         HbbftConfig {
             bind_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), DEFAULT_HBBFT_PORT),
-            // remote_addresses: HashSet::new(),
+            remote_addresses: HashSet::new(),
             batch_size: DEFAULT_BATCH_SIZE,
             txn_gen_count: DEFAULT_TXN_GEN_COUNT,
             txn_gen_interval: DEFAULT_TXN_GEN_INTERVAL,
@@ -77,6 +77,7 @@ impl From<HbbftConfig> for HydrabadgerConfig {
 
 
 /// Creates a list of socket addresses using defined boot and reserved nodes .
+#[allow(dead_code)]
 pub fn to_peer_addrs(net_conf: &NetworkConfiguration) -> HashSet<SocketAddr> {
     net_conf.boot_nodes.iter().chain(net_conf.reserved_nodes.iter()).filter_map(|node_str| {
         Node::from_str(node_str).ok().map(|node| node.endpoint.address)
