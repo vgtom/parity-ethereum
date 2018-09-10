@@ -33,7 +33,7 @@ use ethcore_service::ClientService;
 use ethereum_types::Address;
 use sync::{self, SyncConfig};
 use miner::work_notify::WorkPoster;
-use futures::{future, IntoFuture};
+use futures::{future, IntoFuture, Future};
 use futures_cpupool::CpuPool;
 use hash_fetch::{self, fetch};
 use informant::{Informant, LightNodeInformantData, FullNodeInformantData};
@@ -499,11 +499,16 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	// let hdb_peers = hbbft::to_peer_addrs(&net_conf);
 	let hdb_peers = cmd.hbbft.remote_addresses.clone();
 	// info!("###### HDB PEERS: {:?}", hdb_peers);
-	runtime.spawn(future::lazy(move || {
-		let fut = hdb.clone().node(Some(hdb_peers));
-		info!("Hydrabadger task spawned.");
-		fut
-	}));
+	// runtime.spawn(future::lazy(move || {
+	// 	let fut = hdb.clone().node(Some(hdb_peers));
+	// 	info!("Hydrabadger task spawned.");
+	// 	fut
+	// }));
+
+	let runtime_th = thread::Builder::new().name("tokio-runtime".to_string()).spawn(move || {
+		runtime.spawn(future::lazy(move || hdb.clone().node(Some(hdb_peers)) ));
+	    runtime.shutdown_on_idle().wait().expect("Tokio runtime should not have unhandled errors.");
+	}).map_err(|err| format!("Error creating thread: {:?}", err))?;
 
 	// fetch service
 	let fetch = fetch::Client::new().map_err(|e| format!("Error starting fetch client: {:?}", e))?;
@@ -839,7 +844,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 			client_service: Arc::new(service),
 			keep_alive: Box::new((watcher, updater, ws_server, http_server, ipc_server, secretstore_key_server,
 				ipfs_server, event_loop)),
-			runtime,
+			runtime_th,
 		}
 	})
 }
@@ -865,7 +870,7 @@ enum RunningClientInner {
 		client: Arc<Client>,
 		client_service: Arc<ClientService>,
 		keep_alive: Box<Any>,
-		runtime: Runtime,
+		runtime_th: thread::JoinHandle<()>,
 	},
 }
 
@@ -890,8 +895,6 @@ impl RunningClient {
 
 	/// Shuts down the client.
 	pub fn shutdown(self) {
-		use futures::Future;
-
 		match self.inner {
 			RunningClientInner::Light { rpc, informant, client, keep_alive } => {
 				// Create a weak reference to the client so that we can wait on shutdown
@@ -904,7 +907,7 @@ impl RunningClient {
 				drop(client);
 				wait_for_drop(weak_client);
 			},
-			RunningClientInner::Full { rpc, informant, client, client_service, keep_alive, runtime } => {
+			RunningClientInner::Full { rpc, informant, client, client_service, keep_alive, runtime_th } => {
 				info!("Finishing work, please wait...");
 				// Create a weak reference to the client so that we can wait on shutdown
 				// until it is dropped
@@ -915,7 +918,14 @@ impl RunningClient {
 				// drop this stuff as soon as exit detected.
 				drop(rpc);
 				drop(keep_alive);
-				runtime.shutdown_now().wait().ok();
+
+				// runtime_th.join().unwrap_or_else(|err| {
+				// 	error!("Error shutting down tokio runtime: {:?}", err);
+				// });
+
+				// TODO: Properly shut down runtime.
+				drop(runtime_th);
+
 				// to make sure timer does not spawn requests while shutdown is in progress
 				informant.shutdown();
 				// just Arc is dropping here, to allow other reference release in its default time
