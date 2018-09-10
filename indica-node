@@ -43,14 +43,11 @@ cargo build $RELEASE
 
 PARITY_LOG=peer_node::hydrabadger=error,warn,info,$PARITY_LOG_ADDTL
 
-# RUST_LOG=parity=info cargo run -- --chain $HOME/.poanetwork/indica/spec.json --reserved-peers $HOME/.poanetwork/indica/bootnodes.txt --config $HOME/.poanetwork/indica/parity-config.toml --hbbft-remote-addresses localhost:5900,localhost:5901
-
 set -x
 
 bash -c "\
 RUST_LOG=$PARITY_LOG target/$DIRECTORY/parity \
     --chain indica \
-    --reserved-peers $HOME/.poanetwork/indica/bootnodes.txt \
     --base-path $HOME/.poanetwork/indica/node_$HOST_ID \
     --db-path $HOME/.poanetwork/indica/node_$HOST_ID/chains \
     --keys-path $HOME/.poanetwork/indica/node_$HOST_ID/keys \
@@ -62,6 +59,7 @@ RUST_LOG=$PARITY_LOG target/$DIRECTORY/parity \
     $2 $3 $4 $5 $6 $7 $8 \
 "
 
+### --reserved-peers $HOME/.poanetwork/indica/bootnodes.txt \
 ###  hbbft-remote-addresses localhost:$PEER_0_PORT,localhost:$PEER_1_PORT \
 ###  chain $HOME/.poanetwork/indica/spec.json \
 
