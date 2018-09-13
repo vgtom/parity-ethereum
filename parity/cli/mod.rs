@@ -883,7 +883,7 @@ usage! {
 			"--whisper",
 			"Enable the Whisper network.",
 
- 			ARG arg_whisper_pool_size: (usize) = 10usize, or |c: &Config| c.whisper.as_ref()?.pool_size.clone(),
+			ARG arg_whisper_pool_size: (usize) = 10usize, or |c: &Config| c.whisper.as_ref()?.pool_size.clone(),
 			"--whisper-pool-size=[MB]",
 			"Target size of the whisper message pool in megabytes.",
 
@@ -1109,6 +1109,14 @@ usage! {
 			ARG arg_hbbft_remote_addresses: (Option<String>) = None, or |c: &Config| c.hbbft.as_ref()?.remote_addresses.as_ref().map(|vec| vec.join(",")),
 			"--hbbft-remote-addresses=[NODES]",
 			"Specify remote addresses to connect to upon startup. This is equivalent to bootnodes. NODES should be comma-delimited socket addresses.",
+
+			// // TODO: Add these:
+			// batch_size: usize,
+			// txn_gen_count: usize,
+			// txn_gen_interval: u64,
+			// txn_gen_bytes: usize,
+			// keygen_peer_count: usize,
+			// output_extra_delay_ms: u64,
 	}
 }
 
