@@ -2067,7 +2067,7 @@ mod tests {
 		// the contract rewards (1000 + kind) for each benefactor/reward kind
 		assert_eq!(
 			b2.block().state().balance(&addr1).unwrap(),
-			addr1_balance + (1000 + 0).into() + (1000 + 2).into(),
+			addr1_balance + (1000 + 0) + (1000 + 2),
 		)
 	}
 }

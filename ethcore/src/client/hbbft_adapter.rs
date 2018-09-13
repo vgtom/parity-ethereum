@@ -16,4 +16,8 @@ impl HbbftAdapter {
 #[cfg(test)]
 mod tests {
 
+	#[test]
+	fn add_transaction() {
+
+	}
 }
