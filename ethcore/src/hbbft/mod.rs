@@ -1,10 +1,20 @@
+//!
+
+#![allow(unused_imports, missing_docs)]
+
+mod hbbft_daemon;
+
 use std::str::FromStr;
 use std::collections::HashSet;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+#[cfg(feature = "unused")]
 use sync::{Node, NetworkConfiguration};
 // use network;
 use hydrabadger::Config as HydrabadgerConfig;
 
+pub use self::hbbft_daemon::HbbftDaemon;
+
+///
 pub const DEFAULT_HBBFT_PORT: u16 = 5900;
 
 // The HoneyBadger batch size.
@@ -21,20 +31,30 @@ const DEFAULT_KEYGEN_PEER_COUNT: usize = 2;
 // debugging.
 const DEFAULT_OUTPUT_EXTRA_DELAY_MS: u64 = 0;
 
+///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HbbftConfig {
+    ///
     pub bind_address: SocketAddr,
+    ///
     pub remote_addresses: HashSet<SocketAddr>,
+    ///
     pub batch_size: usize,
+    ///
     pub txn_gen_count: usize,
+    ///
     pub txn_gen_interval: u64,
+    ///
     // TODO: Make this a range:
     pub txn_gen_bytes: usize,
+    ///
     pub keygen_peer_count: usize,
+    ///
     pub output_extra_delay_ms: u64,
 }
 
 impl HbbftConfig {
+    ///
     pub fn to_hydrabadger(&self) -> HydrabadgerConfig {
         HydrabadgerConfig {
             batch_size: self.batch_size,
@@ -77,6 +97,7 @@ impl From<HbbftConfig> for HydrabadgerConfig {
 
 
 /// Creates a list of socket addresses using defined boot and reserved nodes .
+#[cfg(feature = "unused")]
 #[allow(dead_code)]
 pub fn to_peer_addrs(net_conf: &NetworkConfiguration) -> HashSet<SocketAddr> {
     net_conf.boot_nodes.iter().chain(net_conf.reserved_nodes.iter()).filter_map(|node_str| {

@@ -1,29 +1,121 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables, missing_docs)]
 
+use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 use std::thread;
-use futures::sync::mpsc::Receiver;
+use std::time::Duration;
+use futures::{
+	Future,
+	future,
+	sync::mpsc::Receiver,
+	sync::oneshot,
+};
 use client::Client;
+use parity_reactor::{tokio, Runtime};
+use hbbft::HbbftConfig;
+use hydrabadger::{Hydrabadger};
 
-pub struct HbbftAdapter {
-	client: Client,
-	block_rx: Receiver<u8>,
-	th: thread::JoinHandle<()>,
-}
 
-impl HbbftAdapter {
-	pub fn new(client: Client, block_rx: Receiver<u8>,) -> HbbftAdapter {
+// #[derive(Debug)]
+// pub enum Error {
+// 	#[fail(display = "Tokio runtime failed to start: {:?}", 0)]
+// 	RuntimeStart(tokio::io::Error),
+// }
 
-		let th = thread::Builder::new().name("hbbft-adapter".into()).spawn(|| {
-
-		}).unwrap();
-
-		HbbftAdapter {
-			client,
-			block_rx,
-			th,
-		}
+error_chain! {
+	types {
+		Error, ErrorKind, ErrorResultExt, HbbftDaemonResult;
 	}
 
+	errors {
+		#[doc = "Tokio runtime start error."]
+		RuntimeStart(err: tokio::io::Error) {
+			description("Snapshot error.")
+			display("Tokio runtime failed to start: {:?}", err)
+		}
+	}
+}
+
+#[derive(Debug)]
+struct Shutdown {
+	tx: Option<oneshot::Sender<()>>,
+	sig: Arc<AtomicBool>,
+}
+
+impl Shutdown {
+	fn new() -> (Shutdown, oneshot::Receiver<()>) {
+		let (tx, rx) = oneshot::channel();
+
+		(
+			Shutdown {
+				tx: Some(tx),
+				// rx: Arc::new(Mutex::new(rx)),
+				sig: Arc::new(AtomicBool::new(false)),
+			},
+			rx
+		)
+	}
+
+	fn shutdown(&mut self) {
+		self.sig.store(true, Ordering::Release);
+		self.tx.take().map(|tx| tx.send(()));
+	}
+}
+
+
+pub struct HbbftDaemon {
+	client: Arc<Client>,
+	// block_rx: Receiver<u8>,
+	runtime_th: thread::JoinHandle<()>,
+	th: thread::JoinHandle<()>,
+	shutdown: Shutdown,
+}
+
+impl HbbftDaemon {
+	pub fn new(client: Arc<Client>, cfg: &HbbftConfig) -> Result<HbbftDaemon, Error> {
+		// Hydrabadger
+		let hdb = Hydrabadger::new(cfg.bind_address, cfg.to_hydrabadger());
+		let hdb_peers = cfg.remote_addresses.clone();
+
+		let (shutdown, shutdown_rx) = Shutdown::new();
+
+		// Create Tokio runtime:
+		let mut runtime = Runtime::new().map_err(ErrorKind::RuntimeStart)?;
+
+		let runtime_th = thread::Builder::new().name("tokio-runtime".to_string()).spawn(move || {
+			runtime.spawn(future::lazy(move || hdb.clone().node(Some(hdb_peers)) ));
+		    // runtime.shutdown_on_idle().wait().expect("Tokio runtime should not have unhandled errors.");
+		    runtime.block_on(shutdown_rx).expect("Tokio runtime error");
+		    runtime.shutdown_now().wait().expect("Error shutting down tokio runtime");
+		}).map_err(|err| format!("Error creating thread: {:?}", err))?;
+
+		let client_clone = client.clone();
+		let shutdown_sig = shutdown.sig.clone();
+		let th = thread::Builder::new().name("hbbft-daemon".to_string()).spawn(move || {
+			let client = client_clone;
+
+			while shutdown_sig.load(Ordering::Acquire) {
+
+
+				println!("Cycling hbbft daemon...");
+				info!("Cycling hbbft daemon...");
+				thread::sleep(Duration::from_millis(5000));
+			}
+		}).unwrap();
+
+		Ok(HbbftDaemon {
+			client,
+			// block_rx,
+			runtime_th,
+			th,
+			shutdown,
+		})
+	}
+}
+
+impl Drop for HbbftDaemon {
+	fn drop(&mut self) {
+		self.shutdown.shutdown();
+	}
 }
 
 

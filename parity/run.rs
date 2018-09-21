@@ -22,18 +22,20 @@ use std::thread;
 use ansi_term::Colour;
 use bytes::Bytes;
 use ethcore::account_provider::{AccountProvider, AccountProviderSettings};
-use ethcore::client::{BlockId, CallContract, Client, Mode, DatabaseCompactionProfile, VMType, BlockChainClient, BlockInfo};
+use ethcore::client::{BlockId, CallContract, Client, Mode, DatabaseCompactionProfile, VMType, BlockChainClient,
+	BlockInfo};
 use ethcore::ethstore::ethkey;
 use ethcore::miner::{stratum, Miner, MinerService, MinerOptions};
 use ethcore::snapshot::{self, SnapshotConfiguration};
 use ethcore::spec::{SpecParams, OptimizeFor};
 use ethcore::verification::queue::VerifierSettings;
+use ethcore::hbbft::HbbftConfig;
 use ethcore_logger::{Config as LogConfig, RotatingLogger};
 use ethcore_service::ClientService;
 use ethereum_types::Address;
 use sync::{self, SyncConfig};
 use miner::work_notify::WorkPoster;
-use futures::{future, IntoFuture, Future};
+use futures::IntoFuture;
 use futures_cpupool::CpuPool;
 use hash_fetch::{self, fetch};
 use informant::{Informant, LightNodeInformantData, FullNodeInformantData};
@@ -41,7 +43,7 @@ use journaldb::Algorithm;
 use light::Cache as LightDataCache;
 use miner::external::ExternalMiner;
 use node_filter::NodeFilter;
-use parity_reactor::{EventLoop, Runtime};
+use parity_reactor::EventLoop;
 use parity_rpc::{Origin, Metadata, NetworkSettings, informant, is_major_importing};
 use updater::{UpdatePolicy, Updater};
 use parity_version::version;
@@ -65,8 +67,6 @@ use secretstore;
 use signer;
 use db;
 use ethkey::Password;
-use hbbft::HbbftConfig;
-use hydrabadger::{Hydrabadger};
 
 // how often to take periodic snapshots.
 const SNAPSHOT_PERIOD: u64 = 5000;
@@ -474,9 +474,6 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	// prepare account provider
 	let account_provider = Arc::new(prepare_account_provider(&cmd.spec, &cmd.dirs, &spec.data_dir, cmd.acc_conf, &passwords)?);
 
-	// Create Tokio runtime:
-	let mut runtime = Runtime::new().map_err(|e| format!("Tokio runtime failed to start: {:?}", e))?;
-
 	// TODO: Remove: Superseded by `Runtime`.
 	let cpu_pool = CpuPool::new(4);
 
@@ -484,31 +481,6 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	//
 	// TODO: Remove: Superseded by `Runtime`.
 	let event_loop = EventLoop::spawn();
-
-	// set up bootnodes
-	let mut net_conf = cmd.net_conf;
-	if !cmd.custom_bootnodes {
-		net_conf.boot_nodes = spec.nodes.clone();
-	}
-
-	// info!("###### BOOT NODES: \n{:?}", net_conf.boot_nodes);
-	// info!("###### RESERVED NODES: \n{:?}", net_conf.reserved_nodes);
-
-	// Hydrabadger
-	let hdb = Hydrabadger::new(cmd.hbbft.bind_address, cmd.hbbft.to_hydrabadger());
-	// let hdb_peers = hbbft::to_peer_addrs(&net_conf);
-	let hdb_peers = cmd.hbbft.remote_addresses.clone();
-	// info!("###### HDB PEERS: {:?}", hdb_peers);
-	// runtime.spawn(future::lazy(move || {
-	// 	let fut = hdb.clone().node(Some(hdb_peers));
-	// 	info!("Hydrabadger task spawned.");
-	// 	fut
-	// }));
-
-	let runtime_th = thread::Builder::new().name("tokio-runtime".to_string()).spawn(move || {
-		runtime.spawn(future::lazy(move || hdb.clone().node(Some(hdb_peers)) ));
-	    runtime.shutdown_on_idle().wait().expect("Tokio runtime should not have unhandled errors.");
-	}).map_err(|err| format!("Error creating thread: {:?}", err))?;
 
 	// fetch service
 	let fetch = fetch::Client::new().map_err(|e| format!("Error starting fetch client: {:?}", e))?;
@@ -575,6 +547,12 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	client_config.transaction_verification_queue_size = ::std::cmp::max(2048, txpool_size / 4);
 	client_config.snapshot = cmd.snapshot_conf.clone();
 
+	// set up bootnodes
+	let mut net_conf = cmd.net_conf;
+	if !cmd.custom_bootnodes {
+		net_conf.boot_nodes = spec.nodes.clone();
+	}
+
 	// set network path.
 	net_conf.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());
 
@@ -594,6 +572,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 		account_provider.clone(),
 		Box::new(SecretStoreEncryptor::new(cmd.private_encryptor_conf, fetch.clone()).map_err(|e| e.to_string())?),
 		cmd.private_provider_conf,
+		Some(&cmd.hbbft),
 	).map_err(|e| format!("Client service error: {:?}", e))?;
 
 	let connection_filter_address = spec.params().node_permission_contract;
@@ -844,7 +823,6 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 			client_service: Arc::new(service),
 			keep_alive: Box::new((watcher, updater, ws_server, http_server, ipc_server, secretstore_key_server,
 				ipfs_server, event_loop)),
-			runtime_th,
 		}
 	})
 }
@@ -870,7 +848,6 @@ enum RunningClientInner {
 		client: Arc<Client>,
 		client_service: Arc<ClientService>,
 		keep_alive: Box<Any>,
-		runtime_th: thread::JoinHandle<()>,
 	},
 }
 
@@ -907,7 +884,7 @@ impl RunningClient {
 				drop(client);
 				wait_for_drop(weak_client);
 			},
-			RunningClientInner::Full { rpc, informant, client, client_service, keep_alive, runtime_th } => {
+			RunningClientInner::Full { rpc, informant, client, client_service, keep_alive } => {
 				info!("Finishing work, please wait...");
 				// Create a weak reference to the client so that we can wait on shutdown
 				// until it is dropped
@@ -918,13 +895,6 @@ impl RunningClient {
 				// drop this stuff as soon as exit detected.
 				drop(rpc);
 				drop(keep_alive);
-
-				// runtime_th.join().unwrap_or_else(|err| {
-				// 	error!("Error shutting down tokio runtime: {:?}", err);
-				// });
-
-				// TODO: Properly shut down runtime.
-				drop(runtime_th);
 
 				// to make sure timer does not spawn requests while shutdown is in progress
 				informant.shutdown();

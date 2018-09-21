@@ -32,6 +32,7 @@ use ethcore::client::{VMType};
 use ethcore::miner::{stratum, MinerOptions};
 use ethcore::snapshot::SnapshotConfiguration;
 use ethcore::verification::queue::VerifierSettings;
+use ethcore::hbbft::HbbftConfig;
 use miner::pool;
 use num_cpus;
 
@@ -54,7 +55,6 @@ use presale::ImportWallet;
 use account::{AccountCmd, NewAccount, ListAccounts, ImportAccounts, ImportFromGethAccounts};
 use snapshot::{self, SnapshotCommand};
 use network::{IpFilter};
-use hbbft::HbbftConfig;
 
 const DEFAULT_MAX_PEERS: u16 = 50;
 const DEFAULT_MIN_PEERS: u16 = 25;
@@ -1454,7 +1454,6 @@ mod tests {
 			whisper: Default::default(),
 			on_demand_retry_count: None,
 			on_demand_inactive_time_limit: None,
-			hydrabadger: HydrabadgerConfig::new(),
 			hbbft: HbbftConfig::default(),
 		};
 		expected.secretstore_conf.enabled = cfg!(feature = "secretstore");

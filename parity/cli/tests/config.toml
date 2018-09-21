@@ -91,4 +91,4 @@ pool_size = 50
 [hbbft]
 port = 5910
 interface = "local"
-remote_addresses = "127.0.0.1:5911"
+remote_addresses = ["127.0.0.1:5911"]
