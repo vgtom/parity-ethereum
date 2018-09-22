@@ -9,8 +9,10 @@ use futures::{
 	sync::mpsc::Receiver,
 	sync::oneshot,
 };
-use client::Client;
+use client::{Client, ImportBlock};
 use parity_reactor::{tokio, Runtime};
+use verification::queue::kind::blocks::{Unverified};
+use header::Header;
 use hbbft::HbbftConfig;
 use hydrabadger::{Hydrabadger};
 
@@ -88,16 +90,26 @@ impl HbbftDaemon {
 		    runtime.shutdown_now().wait().expect("Error shutting down tokio runtime");
 		}).map_err(|err| format!("Error creating thread: {:?}", err))?;
 
+		info!("Starting HbbftDaemon...");
+
 		let client_clone = client.clone();
 		let shutdown_sig = shutdown.sig.clone();
 		let th = thread::Builder::new().name("hbbft-daemon".to_string()).spawn(move || {
 			let client = client_clone;
 
-			while shutdown_sig.load(Ordering::Acquire) {
+			while !shutdown_sig.load(Ordering::Acquire) {
 
+				let bad_block = Unverified {
+					header: Header::default(),
+					transactions: vec![],
+					uncles: vec![],
+					bytes: vec![1, 2, 3],
+				};
 
-				println!("Cycling hbbft daemon...");
-				info!("Cycling hbbft daemon...");
+				// info!("HbbftDaemon: Importing block...");
+				client.import_block(bad_block).expect("Block import error");
+				// info!("HbbftDaemon: Block import complete.");
+
 				thread::sleep(Duration::from_millis(5000));
 			}
 		}).unwrap();
