@@ -38,9 +38,12 @@ do
     case $DIR in
       x86_64* )
         DATA="commit=$CI_BUILD_REF&sha3=$sha256&filename=parity$WIN&secret=$RELEASES_SECRET"
-        ../../scripts/gitlab/safe_curl.sh $DATA "http://update.parity.io:1337/push-build/$CI_BUILD_REF_NAME/$DIR"
+#        ../../scripts/gitlab/safe_curl.sh $DATA "http://update.parity.io:1337/push-build/$CI_BUILD_REF_NAME/$DIR"
         # Kovan
-        ../../scripts/gitlab/safe_curl.sh $DATA "http://update.parity.io:1338/push-build/$CI_BUILD_REF_NAME/$DIR"
+#        ../../scripts/gitlab/safe_curl.sh $DATA "http://update.parity.io:1338/push-build/$CI_BUILD_REF_NAME/$DIR"
+        # Sokol
+        ../../scripts/gitlab/safe_curl.sh $DATA "http://45.32.70.198:1339/push-build/$CI_BUILD_REF_NAME/$DIR"
+
         ;;
     esac
     RELEASE_TABLE="$(echo "${RELEASE_TABLE/sha$DIR/${sha256}}")"
@@ -58,10 +61,10 @@ github-release release --user devops-parity --repo parity-ethereum --tag "$CI_CO
 echo "__________Push binaries to AWS S3____________"
 aws configure set aws_access_key_id $s3_key
 aws configure set aws_secret_access_key $s3_secret
-if [[ "$CI_BUILD_REF_NAME" = "beta" || "$CI_BUILD_REF_NAME" = "stable" || "$CI_BUILD_REF_NAME" = "nightly" ]];
-  then
-    export S3_BUCKET=builds-parity-published;
-  else
-    export S3_BUCKET=builds-parity;
-fi
+#if [[ "$CI_BUILD_REF_NAME" = "beta" || "$CI_BUILD_REF_NAME" = "stable" || "$CI_BUILD_REF_NAME" = "nightly" ]];
+#  then
+#    export S3_BUCKET=builds-parity-published;
+#  else
+#    export S3_BUCKET=builds-parity;
+#fi
 aws s3 sync ./ s3://$S3_BUCKET/$CI_BUILD_REF_NAME/
