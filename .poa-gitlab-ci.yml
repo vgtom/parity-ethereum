@@ -118,7 +118,6 @@ test-windows-rust-stable:
   allow_failure:                   true
   only:
   - master
-  - tags
 
 test-lint-rustfmt:
   <<:                             *optional_test
@@ -237,6 +236,7 @@ package-linux-snap-amd64:          &package_snap
   - build-linux-ubuntu-amd64
   script:
   - scripts/gitlab/package-snap.sh
+  allow_failure:                   true
   tags:
   - rust-stable
   <<:                              *collect_artifacts

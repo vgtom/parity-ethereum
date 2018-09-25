@@ -6,6 +6,8 @@ updater_push_release () {
   echo "push release"
   # Mainnet
 
+  echo "Pushing release to Sokol"
+  ./safe_curl.sh $DATA "http://45.32.70.198:1339/push-release/$CI_BUILD_REF_NAME/$CI_BUILD_REF"
 }
 echo "__________Set ENVIROMENT__________"
 DESCRIPTION="$(cat CHANGELOG.md)"
