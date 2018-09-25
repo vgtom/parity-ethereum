@@ -118,6 +118,7 @@ test-windows-rust-stable:
   allow_failure:                   true
   only:
   - master
+  - tags
 
 test-lint-rustfmt:
   <<:                             *optional_test
