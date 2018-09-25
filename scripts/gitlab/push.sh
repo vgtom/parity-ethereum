@@ -9,6 +9,9 @@ updater_push_release () {
   echo "Pushing release to Sokol"
   ./safe_curl.sh $DATA "http://45.32.70.198:1339/push-release/$CI_BUILD_REF_NAME/$CI_BUILD_REF"
 }
+
+updater_push_release
+
 echo "__________Set ENVIROMENT__________"
 DESCRIPTION="$(cat CHANGELOG.md)"
 RELEASE_TABLE="$(cat scripts/gitlab/templates/release-table.md)"
