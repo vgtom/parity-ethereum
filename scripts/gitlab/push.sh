@@ -62,8 +62,6 @@ DESCRIPTION="$(echo "${DESCRIPTION/${REPLACE_TEXT}/${RELEASE_TABLE}
 ${REPLACE_TEXT}}")"
 echo "$DESCRIPTION"
 if [[ "$CI_COMMIT_REF_NAME" == "nightly" ]]; then DESCRIPTION=""; fi #TODO in the future, we need to prepare a script that will do changelog
-echo "__________Create release to Github____________"
-github-release release --user devops-parity --repo parity-ethereum --tag "$CI_COMMIT_REF_NAME" --draft --name "$NAME" --description "$DESCRIPTION"
 echo "__________Push binaries to AWS S3____________"
 aws configure set aws_access_key_id $s3_key
 aws configure set aws_secret_access_key $s3_secret
@@ -74,3 +72,7 @@ aws configure set aws_secret_access_key $s3_secret
 #    export S3_BUCKET=builds-parity;
 #fi
 aws s3 sync ./ s3://$S3_BUCKET/$CI_BUILD_REF_NAME/
+
+echo "__________Create release to Github____________"
+github-release release --user devops-parity --repo parity-ethereum --tag "$CI_COMMIT_REF_NAME" --draft --name "$NAME" --description "$DESCRIPTION"
+
