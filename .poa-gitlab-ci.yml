@@ -310,7 +310,7 @@ publish-docker-parity-amd64: &publish_docker
   dependencies:
   - build-linux-ubuntu-amd64
   tags:
-  - shell
+  - docker
   script:
   - scripts/gitlab/publish-docker.sh parity
 
