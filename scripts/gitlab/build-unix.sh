@@ -33,4 +33,6 @@ for binary in $(ls)
 do
 #  rhash --sha256 $binary -o $binary.sha256
 ./parity tools hash $binary >> $binary.sha256
+echo "checksum: "
+cat $binary.sha256
 done

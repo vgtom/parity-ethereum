@@ -102,6 +102,7 @@ fn validate_hash(path: PathBuf, hash: H256, body: fetch::BodyReader) -> Result<P
 	let content_hash = keccak_buffer(&mut file_reader)?;
 	if content_hash != hash {
 		Err(Error::HashMismatch{ got: content_hash, expected: hash })
+
 	} else {
 		Ok(path)
 	}
@@ -165,7 +166,9 @@ impl<F: Fetch + 'static> HashFetch for Client<F> {
 			.and_then(move |response| pool.spawn_fn(move || {
 				debug!(target: "fetch", "Content fetched, validating hash ({:?})", hash);
 				let path = random_path();
+
 				let res = validate_hash(path.clone(), hash, fetch::BodyReader::new(response));
+
 				if let Err(ref err) = res {
 					trace!(target: "fetch", "Error: {:?}", err);
 					// Remove temporary file in case of error
@@ -177,18 +180,6 @@ impl<F: Fetch + 'static> HashFetch for Client<F> {
 
 		self.remote.spawn(future);
 	}
-}
-
-fn random_temp_path() -> PathBuf {
-	use ::rand::Rng;
-	use ::std::env;
-
-	let mut rng = ::rand::OsRng::new().expect("Reliable random source is required to work.");
-	let file: String = rng.gen_ascii_chars().take(12).collect();
-
-	let mut path = env::temp_dir();
-	path.push(file);
-	path
 }
 
 #[cfg(test)]
@@ -287,4 +278,16 @@ mod tests {
 		let result = rx.recv().unwrap();
 		assert!(result.is_ok(), "Should return path, got: {:?}", result);
 	}
+}
+
+fn random_temp_path() -> PathBuf {
+	use ::rand::Rng;
+	use ::std::env;
+
+	let mut rng = ::rand::OsRng::new().expect("Reliable random source is required to work.");
+	let file: String = rng.gen_ascii_chars().take(12).collect();
+
+	let mut path = env::temp_dir();
+	path.push(file);
+	path
 }
