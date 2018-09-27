@@ -38,9 +38,10 @@ do
     else
       WIN="";
   fi
-  for binary in $(ls parity.sha256)
+  for binary in $(ls ./parity)
   do
-    sha256=$(cat $binary | awk '{ print $1}' )
+    sha256="$($binary tools hash $binary)"
+
     case $DIR in
       x86_64* )
         DATA="commit=$CI_BUILD_REF&sha3=$sha256&filename=parity$WIN&secret=$RELEASES_SECRET"
