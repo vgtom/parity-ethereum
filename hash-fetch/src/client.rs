@@ -102,7 +102,6 @@ fn validate_hash(path: PathBuf, hash: H256, body: fetch::BodyReader) -> Result<P
 	let content_hash = keccak_buffer(&mut file_reader)?;
 	if content_hash != hash {
 		Err(Error::HashMismatch{ got: content_hash, expected: hash })
-
 	} else {
 		Ok(path)
 	}

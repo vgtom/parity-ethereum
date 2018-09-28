@@ -31,8 +31,9 @@ strip -v ./*
 echo "_____ Calculating checksums _____"
 for binary in $(ls)
 do
-#  rhash --sha256 $binary -o $binary.sha256
+echo "checksum sha256: "
+  rhash --sha256 $binary
 ./parity tools hash $binary >> $binary.sha256
-echo "checksum: "
+echo "checksum sha3: "
 cat $binary.sha256
 done
