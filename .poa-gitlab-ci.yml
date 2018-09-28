@@ -57,8 +57,6 @@ test-linux-rust-stable:            &test
   - scripts/gitlab/test.sh stable
   tags:
   - rust-stable
-  only:
-  - triggers
 
 test-linux-rust-beta:
   stage:                           test
@@ -67,8 +65,6 @@ test-linux-rust-beta:
   tags:
   - rust-stable
   allow_failure:                   true
-  only:
-  - triggers
 
 test-linux-rust-nightly:
   stage:                           test
@@ -77,8 +73,6 @@ test-linux-rust-nightly:
   tags:
   - rust-stable
   allow_failure:                   true
-  only:
-  - triggers
 
 test-darwin-rust-stable:
   stage:                           test
@@ -91,8 +85,6 @@ test-darwin-rust-stable:
   tags:
   - osx
   allow_failure:                   true
-  only:
-  - triggers
 
 test-android-rust-stable:
   stage:                           test
@@ -104,8 +96,6 @@ test-android-rust-stable:
   tags:
   - rust-arm
   allow_failure:                   true
-  only:
-  - triggers
 
 test-windows-rust-stable:
   stage:                           test
@@ -122,8 +112,6 @@ test-windows-rust-stable:
   tags:
   - rust-windows
   allow_failure:                   true
-  only:
-  - triggers
 
 .optional_test:                    &optional_test
   <<:                              *test
@@ -163,8 +151,7 @@ build-linux-ubuntu-amd64:          &build
 
 build-linux-ubuntu-i386:
   <<:                              *build
-  only:
-  - triggers
+  only:                            *releaseable_branches
   image:                           parity/rust-i686:gitlab-ci
   variables:
     CARGO_TARGET:                  i686-unknown-linux-gnu
@@ -174,8 +161,7 @@ build-linux-ubuntu-i386:
 
 build-linux-ubuntu-arm64:
   <<:                              *build
-  only:
-  - triggers
+  only:                            *releaseable_branches
   image:                           parity/rust-arm64:gitlab-ci
   variables:
     CARGO_TARGET:                  aarch64-unknown-linux-gnu
@@ -185,8 +171,7 @@ build-linux-ubuntu-arm64:
 
 build-linux-ubuntu-armhf:
   <<:                              *build
-  only:
-  - triggers
+  only:                            *releaseable_branches
   image:                           parity/rust-armv7:gitlab-ci
   variables:
     CARGO_TARGET:                  armv7-unknown-linux-gnueabihf
@@ -196,8 +181,7 @@ build-linux-ubuntu-armhf:
 
 build-linux-android-armhf:
   stage:                           build
-  only:
-  - triggers
+  only:                            *releaseable_branches
   image:                           parity/rust-android:gitlab-ci
   variables:
     CARGO_TARGET:                  armv7-linux-androideabi
@@ -209,8 +193,7 @@ build-linux-android-armhf:
 
 build-darwin-macos-x86_64:
   stage:                           build
-  only:
-  - triggers
+  only:                            *releaseable_branches
   variables:
     CARGO_TARGET:                  x86_64-apple-darwin
     CC:                            gcc
@@ -223,8 +206,7 @@ build-darwin-macos-x86_64:
 
 build-windows-msvc-x86_64:
   stage:                           build
-  only:
-  - triggers
+  only:                            *releaseable_branches
   cache:
     key:                           "%CI_JOB_NAME%"
     paths:
