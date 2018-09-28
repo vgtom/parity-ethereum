@@ -1,5 +1,5 @@
 stages:
-#- test
+- test
 - build
 - package
 - publish
@@ -57,6 +57,8 @@ test-linux-rust-stable:            &test
   - scripts/gitlab/test.sh stable
   tags:
   - rust-stable
+  only:
+  - triggers
 
 test-linux-rust-beta:
   stage:                           test
@@ -65,6 +67,8 @@ test-linux-rust-beta:
   tags:
   - rust-stable
   allow_failure:                   true
+  only:
+  - triggers
 
 test-linux-rust-nightly:
   stage:                           test
@@ -73,6 +77,8 @@ test-linux-rust-nightly:
   tags:
   - rust-stable
   allow_failure:                   true
+  only:
+  - triggers
 
 test-darwin-rust-stable:
   stage:                           test
@@ -85,6 +91,8 @@ test-darwin-rust-stable:
   tags:
   - osx
   allow_failure:                   true
+  only:
+  - triggers
 
 test-android-rust-stable:
   stage:                           test
@@ -96,6 +104,8 @@ test-android-rust-stable:
   tags:
   - rust-arm
   allow_failure:                   true
+  only:
+  - triggers
 
 test-windows-rust-stable:
   stage:                           test
@@ -112,6 +122,8 @@ test-windows-rust-stable:
   tags:
   - rust-windows
   allow_failure:                   true
+  only:
+  - triggers
 
 .optional_test:                    &optional_test
   <<:                              *test
