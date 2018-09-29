@@ -30,9 +30,10 @@ cp --verbose ../../target/$CARGO_TARGET/release/{parity.exe,parity-evm.exe,ethst
 echo "_____ Calculating checksums _____"
 for binary in $(ls)
 do
-#  rhash --sha256 $binary -o $binary.sha256
-./parity.exe tools hash $binary >> $binary.sha256
+rhash --sha256 $binary -o $binary.sha256
+parity.exe tools hash $binary > $binary.sha3
 echo "checksum: "
 cat $binary.sha256
 done
 cp parity.exe.sha256 parity.sha256
+cp parity.exe.sha3 parity.sha3

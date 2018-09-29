@@ -4,11 +4,11 @@ set -e # fail on any error
 set -u # treat unset variables as error
 updater_push_release () {
   echo "push release"
+  DATA="secret=$RELEASES_SECRET"
   # Mainnet
 
-  DATA="secret=$RELEASES_SECRET"
   echo "Pushing release to Sokol"
-  scripts/gitlab/safe_curl.sh $DATA "http://45.32.70.198:1339/push-release/$CI_BUILD_REF_NAME/$CI_BUILD_REF"
+  ./scripts/gitlab/safe_curl.sh $DATA "http://45.32.70.198:1339/push-release/$CI_BUILD_REF_NAME/$CI_BUILD_REF"
 }
 
 updater_push_release
@@ -41,9 +41,16 @@ do
   for binary in $(ls parity.sha256)
   do
     sha256=$(cat $binary | awk '{ print $1}' )
+    RELEASE_TABLE="$(echo "${RELEASE_TABLE/sha$DIR/${sha256}}")"
+  done
+
+  for binary in $(ls parity.sha3)
+  do
+    sha3=$(cat ${binary.sha3} | awk '{ print $1}' )
+    echo "sha3: " $sha3
     case $DIR in
       x86_64* )
-        DATA="commit=$CI_BUILD_REF&sha3=$sha256&filename=parity$WIN&secret=$RELEASES_SECRET"
+        DATA="commit=$CI_BUILD_REF&sha3=$sha3&filename=parity$WIN&secret=$RELEASES_SECRET"
 #        ../../scripts/gitlab/safe_curl.sh $DATA "http://update.parity.io:1337/push-build/$CI_BUILD_REF_NAME/$DIR"
         # Kovan
 #        ../../scripts/gitlab/safe_curl.sh $DATA "http://update.parity.io:1338/push-build/$CI_BUILD_REF_NAME/$DIR"
@@ -52,7 +59,6 @@ do
 
         ;;
     esac
-    RELEASE_TABLE="$(echo "${RELEASE_TABLE/sha$DIR/${sha256}}")"
   done
   cd ..
 done
