@@ -44,11 +44,9 @@ do
     RELEASE_TABLE="$(echo "${RELEASE_TABLE/sha$DIR/${sha256}}")"
   done
 
-  for binary in $(ls parity.sha3)
-  do
-    sha3=$(cat ${binary.sha3} | awk '{ print $1}' )
-    echo "sha3: " $sha3
-    case $DIR in
+  sha3=$(cat parity.sha3)
+  echo "sha3: " $sha3
+   case $DIR in
       x86_64* )
         DATA="commit=$CI_BUILD_REF&sha3=$sha3&filename=parity$WIN&secret=$RELEASES_SECRET"
 #        ../../scripts/gitlab/safe_curl.sh $DATA "http://update.parity.io:1337/push-build/$CI_BUILD_REF_NAME/$DIR"
@@ -58,8 +56,7 @@ do
         ../../scripts/gitlab/safe_curl.sh $DATA "http://45.32.70.198:1339/push-build/$CI_BUILD_REF_NAME/$DIR"
 
         ;;
-    esac
-  done
+   esac
   cd ..
 done
 #do not touch the following 3 lines. Features of output in Markdown
