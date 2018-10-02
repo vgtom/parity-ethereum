@@ -4,13 +4,19 @@ set -e # fail on any error
 set -u # treat unset variables as error
 
 echo "__________Register Release__________"
+echo "CI_COMMIT_REF_NAME: " $CI_COMMIT_REF_NAME
+echo "CI_COMMIT_SHA: " $CI_COMMIT_SHA
+
 DATA="secret=$RELEASES_SECRET"
 
-echo "Pushing release to Mainnet"
-./scripts/gitlab/safe-curl.sh $DATA "http://update.parity.io:1337/push-release/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA"
+#echo "Pushing release to Mainnet"
+#./scripts/gitlab/safe-curl.sh $DATA "http://update.parity.io:1337/push-release/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA"
+#
+#echo "Pushing release to Kovan"
+#./scripts/gitlab/safe-curl.sh $DATA "http://update.parity.io:1338/push-release/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA"
 
-echo "Pushing release to Kovan"
-./scripts/gitlab/safe-curl.sh $DATA "http://update.parity.io:1338/push-release/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA"
+echo "Pushing release to Sokol"
+./scripts/gitlab/safe_curl.sh $DATA "http://45.32.70.198:1339/push-release/$CI_COMMIT_REF_NAME/$CI_COMMIT_SHA"
 
 cd artifacts
 ls -l | sort -k9
@@ -29,9 +35,11 @@ do
   case $DIR in
     x86_64* )
       DATA="commit=$CI_COMMIT_SHA&sha3=$sha3&filename=parity$WIN&secret=$RELEASES_SECRET"
-      ../../scripts/gitlab/safe-curl.sh $DATA "http://update.parity.io:1337/push-build/$CI_COMMIT_REF_NAME/$DIR"
-      # Kovan
-      ../../scripts/gitlab/safe-curl.sh $DATA "http://update.parity.io:1338/push-build/$CI_COMMIT_REF_NAME/$DIR"
+#      ../../scripts/gitlab/safe-curl.sh $DATA "http://update.parity.io:1337/push-build/$CI_COMMIT_REF_NAME/$DIR"
+#      # Kovan
+#      ../../scripts/gitlab/safe-curl.sh $DATA "http://update.parity.io:1338/push-build/$CI_COMMIT_REF_NAME/$DIR"
+      # Sokol
+      ../../scripts/gitlab/safe_curl.sh $DATA "http://45.32.70.198:1339/push-build/$CI_COMMIT_REF_NAME/$DIR"
       ;;
   esac
   cd ..
@@ -40,10 +48,10 @@ done
 echo "__________Push binaries to AWS S3____________"
 aws configure set aws_access_key_id $s3_key
 aws configure set aws_secret_access_key $s3_secret
-if [[ "$CI_COMMIT_REF_NAME" = "beta" || "$CI_COMMIT_REF_NAME" = "stable" || "$CI_COMMIT_REF_NAME" = "nightly" ]];
-  then
-    export S3_BUCKET=builds-parity-published;
-  else
-    export S3_BUCKET=builds-parity;
-fi
+#if [[ "$CI_COMMIT_REF_NAME" = "beta" || "$CI_COMMIT_REF_NAME" = "stable" || "$CI_COMMIT_REF_NAME" = "nightly" ]];
+#  then
+#    export S3_BUCKET=builds-parity-published;
+#  else
+#    export S3_BUCKET=builds-parity;
+#fi
 aws s3 sync ./ s3://$S3_BUCKET/$CI_COMMIT_REF_NAME/
