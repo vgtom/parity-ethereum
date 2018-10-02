@@ -81,7 +81,6 @@ build-windows:
     CARGO_TARGET:                  x86_64-pc-windows-msvc
   script:
   - sh scripts/gitlab/build-windows.sh
-  allow_failure:                   true
   tags:
   - rust-windows
   <<:                              *collect_artifacts
@@ -93,7 +92,7 @@ publish-docker:
   dependencies:
   - build-linux
   tags:
-  - shell
+  - docker
   script:
   - scripts/gitlab/publish-docker.sh parity
 
