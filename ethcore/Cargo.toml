@@ -72,7 +72,7 @@ serde_derive = "1.0"
 tempdir = {version="0.3", optional = true}
 failure = "0.1"
 futures = "0.1"
-parity-reactor = { path = "../util/reactor" }
+parity-reactor = { path = "../util/runtime" }
 # hydrabadger = { path = "../../hydrabadger"}
 hydrabadger = { git = "https://github.com/poanetwork/hydrabadger"}
 
