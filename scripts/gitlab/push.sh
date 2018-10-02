@@ -73,7 +73,3 @@ aws configure set aws_secret_access_key $s3_secret
 #    export S3_BUCKET=builds-parity;
 #fi
 aws s3 sync ./ s3://$S3_BUCKET/$CI_BUILD_REF_NAME/
-
-echo "__________Create release to Github____________"
-github-release release --user devops-parity --repo parity-ethereum --tag "$CI_COMMIT_REF_NAME" --draft --name "$NAME" --description "$DESCRIPTION"
-
