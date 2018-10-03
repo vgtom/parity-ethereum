@@ -612,7 +612,7 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O,
 		// We rely on a secure state. Bail if we're unsure about it.
 		if !cfg!(feature = "test-updater") {
 			if self.client.upgrade().map_or(true, |c| !c.chain_info().security_level().is_full()) {
-				info!(target: "updater", "!!! secure state didn't match, supposed to return");
+				info!(target: "updater", "!!! secure state didn't match, should return");
 				//return;
 			} else { info!(target: "updater", "!!! secure state match"); }
 		}
