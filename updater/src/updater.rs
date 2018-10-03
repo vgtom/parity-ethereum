@@ -467,6 +467,7 @@ impl<O: OperationsClient, F: HashFetch, T: TimeProvider, R: GenRange> Updater<O,
 		}
 	}
 
+
 	fn execute_upgrade(&self, mut state: MutexGuard<UpdaterState>) -> bool {
 		if let UpdaterStatus::Ready { ref release } = state.status.clone() {
 			let file = Updater::update_file_name(&release.version);
