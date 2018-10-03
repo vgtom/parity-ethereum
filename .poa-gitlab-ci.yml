@@ -49,8 +49,6 @@ test-linux:
   - scripts/gitlab/test-all.sh stable
   tags:
   - rust-stable
-  only:
-  - triggers
 
 build-linux:
   stage:                           build
@@ -65,8 +63,7 @@ build-linux:
 
 build-darwin:
   stage:                           build
-  only:
-  - triggers
+  only:                            *releaseable_branches
   variables:
     CARGO_TARGET:                  x86_64-apple-darwin
     CC:                            gcc
@@ -79,8 +76,7 @@ build-darwin:
 
 build-windows:
   stage:                           build
-  only:
-  - triggers
+  only:                            *releaseable_branches
   variables:
     CARGO_TARGET:                  x86_64-pc-windows-msvc
   script:
@@ -91,8 +87,7 @@ build-windows:
 
 publish-docker:
   stage:                           publish
-  only:
-  - triggers
+  only:                            *releaseable_branches
   cache: {}
   dependencies:
   - build-linux
@@ -118,7 +113,7 @@ publish-awss3:
 docs-jsonrpc:
   stage:                            optional
   only:
-  - triggers
+  - tags
   cache: {}
   script:
   - scripts/gitlab/docs-jsonrpc.sh
@@ -129,8 +124,6 @@ cargo-audit:
   stage:                           optional
   script:
   - scripts/gitlab/cargo-audit.sh
-  only:
-  - triggers
   tags:
   - rust-stable
 
@@ -141,8 +134,6 @@ test-android:
     CARGO_TARGET:                  armv7-linux-androideabi
   script:
   - scripts/gitlab/test-all.sh stable
-  only:
-  - triggers
   tags:
   - rust-arm
 
@@ -155,8 +146,6 @@ test-darwin:
     RUN_TESTS:                     cargo
   script:
   - scripts/gitlab/test-all.sh stable
-  only:
-  - triggers
   tags:
   - rust-osx
 
@@ -167,8 +156,6 @@ test-windows:
     RUN_TESTS:                     cargo
   script:
   - sh scripts/gitlab/test-all.sh stable
-  only:
-  - triggers
   tags:
   - rust-windows
 
@@ -178,8 +165,6 @@ test-beta:
     RUN_TESTS:                     cargo
   script:
   - scripts/gitlab/test-all.sh beta
-  only:
-  - triggers
   tags:
   - rust-beta
 
@@ -189,7 +174,5 @@ test-nightly:
     RUN_TESTS:                     all
   script:
   - scripts/gitlab/test-all.sh nightly
-  only:
-  - triggers
   tags:
   - rust-nightly
