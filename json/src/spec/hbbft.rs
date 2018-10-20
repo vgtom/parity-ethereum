@@ -16,6 +16,9 @@
 
 //! Honey Badger BFT engine params deserialization.
 
+use uint::Uint;
+use super::ValidatorSet;
+
 /// Honey Badger BFT engine params deserialization.
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct HbbftParams {
@@ -23,6 +26,20 @@ pub struct HbbftParams {
 	#[serde(rename="millisecondTimestamp")]
 	#[serde(default)]
 	pub millisecond_timestamp: bool,
+	/// Reward per block in wei.
+	#[serde(rename="blockReward")]
+	pub block_reward: Option<Uint>,
+	/// Block at which maximum uncle count should be considered.
+	#[serde(rename="maximumUncleCountTransition")]
+	pub maximum_uncle_count_transition: Option<Uint>,
+	/// Maximum number of accepted uncles.
+	#[serde(rename="maximumUncleCount")]
+	pub maximum_uncle_count: Option<Uint>,
+	/// Valid authorities
+	pub validators: ValidatorSet,
+	/// Block duration, in seconds.
+	#[serde(rename="stepDuration")]
+	pub step_duration: Uint,
 }
 
 /// Honey Badger BFT engine descriptor.
