@@ -1424,7 +1424,7 @@ dependencies = [
 [[package]]
 name = "hydrabadger"
 version = "0.1.0"
-source = "git+https://github.com/poanetwork/hydrabadger#d1f615bd9030fb60c108476be95c54857042a7e7"
+source = "git+https://github.com/poanetwork/hydrabadger#5e4eabf787e443c1fbcdb4fe097df31a97285f95"
 dependencies = [
  "bincode 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
