@@ -1896,7 +1896,7 @@ mod tests {
 			arg_hbbft_port: Some(5910),
 			arg_hbbft_interface: "local".into(),
 			arg_hbbft_remote_addresses: None,
-			arg_hbbft_txn_gen_count: 10,
+			arg_hbbft_txn_gen_count: Some(10),
 		});
 	}
 
