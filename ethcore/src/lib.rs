@@ -120,7 +120,8 @@ extern crate len_caching_lock;
 =======
 extern crate len_caching_mutex;
 extern crate futures;
-extern crate parity_reactor;
+extern crate parity_runtime;
+extern crate tokio;
 extern crate hydrabadger;
 >>>>>>> HBBFT: Add preliminary types and configuration files.
 
