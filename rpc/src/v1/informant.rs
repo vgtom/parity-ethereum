@@ -18,6 +18,7 @@
 
 use std::fmt;
 use std::sync::Arc;
+use snarc::Snarc;
 use std::sync::atomic::{self, AtomicUsize};
 use std::time;
 use parity_runtime;
@@ -238,7 +239,7 @@ impl<M: core::Metadata, T: ActivityNotifier> core::Middleware<M> for Middleware<
 /// Client Notifier
 pub struct ClientNotifier {
 	/// Client
-	pub client: Arc<::ethcore::client::Client>,
+	pub client: Snarc<::ethcore::client::Client>,
 }
 
 impl ActivityNotifier for ClientNotifier {

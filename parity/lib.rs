@@ -17,6 +17,7 @@
 //! Ethcore client application.
 
 #![warn(missing_docs)]
+#![allow(deprecated)]
 
 extern crate ansi_term;
 extern crate docopt;
@@ -70,6 +71,7 @@ extern crate node_filter;
 extern crate keccak_hash as hash;
 extern crate journaldb;
 extern crate registrar;
+extern crate snarc;
 
 #[macro_use]
 extern crate log as rlog;

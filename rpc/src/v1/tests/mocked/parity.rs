@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::Arc;
+use snarc::Snarc;
 use ethcore::account_provider::AccountProvider;
 use ethcore::client::{TestBlockChainClient, Executed, TransactionId};
 use ethcore::receipt::{LocalizedReceipt, TransactionOutcome};
@@ -36,7 +37,7 @@ pub type TestParityClient = ParityClient<TestBlockChainClient, TestMinerService,
 
 pub struct Dependencies {
 	pub miner: Arc<TestMinerService>,
-	pub client: Arc<TestBlockChainClient>,
+	pub client: Snarc<TestBlockChainClient>,
 	pub sync: Arc<TestSyncProvider>,
 	pub updater: Arc<TestUpdater>,
 	pub logger: Arc<RotatingLogger>,
@@ -50,7 +51,7 @@ impl Dependencies {
 	pub fn new() -> Self {
 		Dependencies {
 			miner: Arc::new(TestMinerService::default()),
-			client: Arc::new(TestBlockChainClient::default()),
+			client: Snarc::new(TestBlockChainClient::default()),
 			sync: Arc::new(TestSyncProvider::new(Config {
 				network_id: 3,
 				num_peers: 120,

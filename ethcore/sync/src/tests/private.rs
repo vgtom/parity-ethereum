@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::Arc;
+use snarc::Snarc;
 use hash::keccak;
 use io::{IoHandler, IoChannel};
 use ethcore::client::{BlockChainClient, BlockId, ClientIoMessage};
@@ -54,8 +55,8 @@ fn send_private_transaction() {
 
 	net.peer(0).miner.set_author(s0.address(), Some("".into())).unwrap();
 	net.peer(1).miner.set_author(s1.address(), Some("".into())).unwrap();
-	net.peer(0).chain.engine().register_client(Arc::downgrade(&net.peer(0).chain) as _);
-	net.peer(1).chain.engine().register_client(Arc::downgrade(&net.peer(1).chain) as _);
+	net.peer(0).chain.engine().register_client(Snarc::downgrade(&net.peer(0).chain) as _);
+	net.peer(1).chain.engine().register_client(Snarc::downgrade(&net.peer(1).chain) as _);
 	net.peer(0).chain.set_io_channel(IoChannel::to_handler(Arc::downgrade(&io_handler0)));
 	net.peer(1).chain.set_io_channel(IoChannel::to_handler(Arc::downgrade(&io_handler1)));
 

@@ -84,6 +84,7 @@ extern crate kvdb;
 extern crate memory_cache;
 #[macro_use]
 extern crate error_chain;
+extern crate snarc;
 
 #[cfg(test)]
 extern crate kvdb_memorydb;

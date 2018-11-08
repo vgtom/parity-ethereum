@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::Arc;
+use snarc::Snarc;
 use std::str::FromStr;
 use rustc_hex::FromHex;
 use ethereum_types::{U256, Address};
@@ -34,8 +35,8 @@ fn miner_service() -> Arc<TestMinerService> {
 	Arc::new(TestMinerService::default())
 }
 
-fn client_service() -> Arc<TestBlockChainClient> {
-	Arc::new(TestBlockChainClient::default())
+fn client_service() -> Snarc<TestBlockChainClient> {
+	Snarc::new(TestBlockChainClient::default())
 }
 
 fn network_service() -> Arc<TestManageNetwork> {
@@ -49,7 +50,7 @@ fn updater_service() -> Arc<TestUpdater> {
 pub type TestParitySetClient = ParitySetClient<TestBlockChainClient, TestMinerService, TestUpdater, FakeFetch<usize>>;
 
 fn parity_set_client(
-	client: &Arc<TestBlockChainClient>,
+	client: &Snarc<TestBlockChainClient>,
 	miner: &Arc<TestMinerService>,
 	updater: &Arc<TestUpdater>,
 	net: &Arc<TestManageNetwork>,

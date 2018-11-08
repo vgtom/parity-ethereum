@@ -26,6 +26,7 @@ mod message;
 mod params;
 
 use std::sync::{Weak, Arc};
+use snarc::Weak as SnarcWeak;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::collections::HashSet;
 use hash::keccak;
@@ -75,7 +76,7 @@ pub type BlockHash = H256;
 /// Engine using `Tendermint` consensus algorithm, suitable for EVM chain.
 pub struct Tendermint {
 	step_service: IoService<Step>,
-	client: RwLock<Option<Weak<EngineClient>>>,
+	client: RwLock<Option<SnarcWeak<EngineClient>>>,
 	/// Blockchain height.
 	height: AtomicUsize,
 	/// Consensus view.
@@ -766,7 +767,7 @@ impl Engine<EthereumMachine> for Tendermint {
 		self.to_step(next_step);
 	}
 
-	fn register_client(&self, client: Weak<EngineClient>) {
+	fn register_client(&self, client: SnarcWeak<EngineClient>) {
 		if let Some(c) = client.upgrade() {
 			self.height.store(c.chain_info().best_block_number as usize + 1, AtomicOrdering::SeqCst);
 		}
@@ -781,6 +782,7 @@ impl Engine<EthereumMachine> for Tendermint {
 
 #[cfg(test)]
 mod tests {
+	use snarc::Snarc;
 	use std::str::FromStr;
 	use rustc_hex::FromHex;
 	use ethereum_types::Address;
@@ -1008,7 +1010,7 @@ mod tests {
 		let client = generate_dummy_client(0);
 		let notify = Arc::new(TestNotify::default());
 		client.add_notify(notify.clone());
-		engine.register_client(Arc::downgrade(&client) as _);
+		engine.register_client(Snarc::downgrade(&client) as _);
 
 		let prevote_current = vote(engine.as_ref(), |mh| tap.sign(v0, None, mh).map(H520::from), h, r, Step::Prevote, proposal);
 
@@ -1038,7 +1040,7 @@ mod tests {
 
 		let notify = Arc::new(TestNotify::default());
 		client.add_notify(notify.clone());
-		engine.register_client(Arc::downgrade(&client) as _);
+		engine.register_client(Snarc::downgrade(&client) as _);
 
 		let keypair = Random.generate().unwrap();
 		let transaction = Transaction {

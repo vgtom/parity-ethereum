@@ -17,6 +17,7 @@
 //! Eth Filter RPC implementation
 
 use std::sync::Arc;
+use snarc::Snarc;
 use std::collections::BTreeSet;
 
 use ethcore::miner::{self, MinerService};
@@ -59,14 +60,14 @@ pub trait Filterable {
 
 /// Eth filter rpc implementation for a full node.
 pub struct EthFilterClient<C, M> {
-	client: Arc<C>,
+	client: Snarc<C>,
 	miner: Arc<M>,
 	polls: Mutex<PollManager<SyncPollFilter>>,
 }
 
 impl<C, M> EthFilterClient<C, M> {
 	/// Creates new Eth filter client.
-	pub fn new(client: Arc<C>, miner: Arc<M>, poll_lifetime: u32) -> Self {
+	pub fn new(client: Snarc<C>, miner: Arc<M>, poll_lifetime: u32) -> Self {
 		EthFilterClient {
 			client: client,
 			miner: miner,

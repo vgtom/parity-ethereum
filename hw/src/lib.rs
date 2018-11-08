@@ -18,6 +18,7 @@
 
 #![warn(missing_docs)]
 #![warn(warnings)]
+#![allow(deprecated)]
 
 extern crate ethereum_types;
 extern crate ethkey;
@@ -60,7 +61,7 @@ pub trait Wallet<'a> {
 
 	/// Sign transaction data with wallet managing `address`.
 	fn sign_transaction(&self, address: &Address, transaction: Self::Transaction) -> Result<Signature, Self::Error>;
-	
+
 	/// Set key derivation path for a chain.
 	fn set_key_path(&self, key_path: KeyPath);
 

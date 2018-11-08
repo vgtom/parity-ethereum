@@ -65,10 +65,9 @@ kvdb = "0.1"
 kvdb-rocksdb = "0.1.3"
 journaldb = { path = "util/journaldb" }
 mem = { path = "util/mem" }
-
 ethcore-secretstore = { path = "secret_store", optional = true }
-
 registrar = { path = "registrar" }
+snarc = { git = "https://github.com/mbr/snarc-rs", branch = "c0gent-unsized" }
 
 [build-dependencies]
 rustc_version = "0.2"

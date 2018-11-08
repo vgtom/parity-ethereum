@@ -16,6 +16,7 @@
 
 //! Parity-specific rpc implementation.
 use std::sync::Arc;
+use snarc::Snarc;
 use std::str::FromStr;
 use std::collections::{BTreeMap, HashSet};
 
@@ -55,7 +56,7 @@ use Host;
 
 /// Parity implementation.
 pub struct ParityClient<C, M, U> {
-	client: Arc<C>,
+	client: Snarc<C>,
 	miner: Arc<M>,
 	updater: Arc<U>,
 	sync: Arc<SyncProvider>,
@@ -73,7 +74,7 @@ impl<C, M, U> ParityClient<C, M, U> where
 {
 	/// Creates new `ParityClient`.
 	pub fn new(
-		client: Arc<C>,
+		client: Snarc<C>,
 		miner: Arc<M>,
 		sync: Arc<SyncProvider>,
 		updater: Arc<U>,

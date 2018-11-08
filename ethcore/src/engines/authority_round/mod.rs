@@ -21,7 +21,8 @@ use std::fmt;
 use std::iter::FromIterator;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering as AtomicOrdering};
-use std::sync::{Weak, Arc};
+use std::sync::Arc;
+use snarc::Weak as SnarcWeak;
 use std::time::{UNIX_EPOCH, SystemTime, Duration};
 
 use account_provider::AccountProvider;
@@ -394,7 +395,7 @@ struct PermissionedStep {
 pub struct AuthorityRound {
 	transition_service: IoService<()>,
 	step: Arc<PermissionedStep>,
-	client: Arc<RwLock<Option<Weak<EngineClient>>>>,
+	client: Arc<RwLock<Option<SnarcWeak<EngineClient>>>>,
 	signer: RwLock<EngineSigner>,
 	validators: Box<ValidatorSet>,
 	validate_score_transition: u64,
@@ -834,7 +835,7 @@ fn unix_now() -> Duration {
 
 struct TransitionHandler {
 	step: Arc<PermissionedStep>,
-	client: Arc<RwLock<Option<Weak<EngineClient>>>>,
+	client: Arc<RwLock<Option<SnarcWeak<EngineClient>>>>,
 }
 
 const ENGINE_TIMEOUT_TOKEN: TimerToken = 23;
@@ -1423,7 +1424,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		}
 	}
 
-	fn register_client(&self, client: Weak<EngineClient>) {
+	fn register_client(&self, client: SnarcWeak<EngineClient>) {
 		*self.client.write() = Some(client.clone());
 		self.validators.register_client(client);
 	}
@@ -1466,6 +1467,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 mod tests {
 	use std::collections::BTreeMap;
 	use std::sync::Arc;
+	use snarc::Snarc;
 	use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 	use hash::keccak;
 	use ethereum_types::{Address, H520, H256, U256};
@@ -1827,7 +1829,7 @@ mod tests {
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_test_round_empty_steps, None);
 		let notify = Arc::new(TestNotify::default());
 		client.add_notify(notify.clone());
-		engine.register_client(Arc::downgrade(&client) as _);
+		engine.register_client(Snarc::downgrade(&client) as _);
 
 		engine.set_signer(tap.clone(), addr1, "1".into());
 
@@ -1861,7 +1863,7 @@ mod tests {
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_test_round_empty_steps, None);
 		let notify = Arc::new(TestNotify::default());
 		client.add_notify(notify.clone());
-		engine.register_client(Arc::downgrade(&client) as _);
+		engine.register_client(Snarc::downgrade(&client) as _);
 
 		// step 2
 		let b1 = OpenBlock::new(engine, Default::default(), false, db1, &genesis_header, last_hashes.clone(), addr1, (3141562.into(), 31415620.into()), vec![], false, &mut Vec::new().into_iter()).unwrap();
@@ -1914,7 +1916,7 @@ mod tests {
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_test_round_empty_steps, None);
 		let notify = Arc::new(TestNotify::default());
 		client.add_notify(notify.clone());
-		engine.register_client(Arc::downgrade(&client) as _);
+		engine.register_client(Snarc::downgrade(&client) as _);
 
 		// step 2
 		let b1 = OpenBlock::new(engine, Default::default(), false, db1, &genesis_header, last_hashes.clone(), addr1, (3141562.into(), 31415620.into()), vec![], false, &mut Vec::new().into_iter()).unwrap();
@@ -1964,7 +1966,7 @@ mod tests {
 		let last_hashes = Arc::new(vec![genesis_header.hash()]);
 
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_test_round_empty_steps, None);
-		engine.register_client(Arc::downgrade(&client) as _);
+		engine.register_client(Snarc::downgrade(&client) as _);
 
 		// step 2
 		let b1 = OpenBlock::new(engine, Default::default(), false, db1, &genesis_header, last_hashes.clone(), addr1, (3141562.into(), 31415620.into()), vec![], false, &mut Vec::new().into_iter()).unwrap();
@@ -2085,7 +2087,7 @@ mod tests {
 			Spec::new_test_round_block_reward_contract,
 			None,
 		);
-		engine.register_client(Arc::downgrade(&client) as _);
+		engine.register_client(Snarc::downgrade(&client) as _);
 
 		// step 2
 		let b1 = OpenBlock::new(

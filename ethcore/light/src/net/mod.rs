@@ -32,6 +32,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::{BitOr, BitAnd, Not};
 use std::sync::Arc;
+use snarc::Snarc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -346,7 +347,7 @@ mod id_guard {
 //   Locks must be acquired in the order declared, and when holding a read lock
 //   on the peers, only one peer may be held at a time.
 pub struct LightProtocol {
-	provider: Arc<Provider>,
+	provider: Snarc<Provider>,
 	config: Config,
 	genesis_hash: H256,
 	network_id: u64,
@@ -363,7 +364,7 @@ pub struct LightProtocol {
 
 impl LightProtocol {
 	/// Create a new instance of the protocol manager.
-	pub fn new(provider: Arc<Provider>, params: Params) -> Self {
+	pub fn new(provider: Snarc<Provider>, params: Params) -> Self {
 		debug!(target: "pip", "Initializing light protocol handler");
 
 		let genesis_hash = provider.chain_info().genesis_hash;

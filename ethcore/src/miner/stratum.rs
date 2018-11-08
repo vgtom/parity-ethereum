@@ -17,6 +17,7 @@
 //! Client-side stratum job dispatcher and mining notifier handler
 
 use std::sync::{Arc, Weak};
+use snarc::{Snarc, Weak as SnarcWeak};
 use std::net::{SocketAddr, AddrParseError};
 use std::fmt;
 
@@ -108,7 +109,7 @@ impl fmt::Display for PayloadError {
 /// Job dispatcher for stratum service
 pub struct StratumJobDispatcher {
 	seed_compute: Mutex<SeedHashCompute>,
-	client: Weak<Client>,
+	client: SnarcWeak<Client>,
 	miner: Weak<Miner>,
 }
 
@@ -155,7 +156,7 @@ impl JobDispatcher for StratumJobDispatcher {
 
 impl StratumJobDispatcher {
 	/// New stratum job dispatcher given the miner and client
-	fn new(miner: Weak<Miner>, client: Weak<Client>) -> StratumJobDispatcher {
+	fn new(miner: Weak<Miner>, client: SnarcWeak<Client>) -> StratumJobDispatcher {
 		StratumJobDispatcher {
 			seed_compute: Mutex::new(SeedHashCompute::default()),
 			client: client,
@@ -175,11 +176,11 @@ impl StratumJobDispatcher {
 		)
 	}
 
-	fn with_core<F, R>(&self, f: F) -> Option<R> where F: Fn(Arc<Client>, Arc<Miner>) -> Option<R> {
+	fn with_core<F, R>(&self, f: F) -> Option<R> where F: Fn(Snarc<Client>, Arc<Miner>) -> Option<R> {
 		self.client.upgrade().and_then(|client| self.miner.upgrade().and_then(|miner| (f)(client, miner)))
 	}
 
-	fn with_core_result<F>(&self, f: F) -> Result<(), StratumServiceError> where F: Fn(Arc<Client>, Arc<Miner>) -> Result<(), StratumServiceError> {
+	fn with_core_result<F>(&self, f: F) -> Result<(), StratumServiceError> where F: Fn(Snarc<Client>, Arc<Miner>) -> Result<(), StratumServiceError> {
 		match (self.client.upgrade(), self.miner.upgrade()) {
 			(Some(client), Some(miner)) => f(client, miner),
 			_ => Ok(()),
@@ -226,7 +227,7 @@ impl NotifyWork for Stratum {
 impl Stratum {
 
 	/// New stratum job dispatcher, given the miner, client and dedicated stratum service
-	pub fn start(options: &Options, miner: Weak<Miner>, client: Weak<Client>) -> Result<Stratum, Error> {
+	pub fn start(options: &Options, miner: Weak<Miner>, client: SnarcWeak<Client>) -> Result<Stratum, Error> {
 		use std::net::IpAddr;
 
 		let dispatcher = Arc::new(StratumJobDispatcher::new(miner, client));
@@ -245,7 +246,7 @@ impl Stratum {
 
 	/// Start STRATUM job dispatcher and register it in the miner
 	#[cfg(feature = "work-notify")]
-	pub fn register(cfg: &Options, miner: Arc<Miner>, client: Weak<Client>) -> Result<(), Error> {
+	pub fn register(cfg: &Options, miner: Arc<Miner>, client: SnarcWeak<Client>) -> Result<(), Error> {
 		let stratum = Stratum::start(cfg, Arc::downgrade(&miner.clone()), client)?;
 		miner.add_work_listener(Box::new(stratum) as Box<NotifyWork>);
 		Ok(())

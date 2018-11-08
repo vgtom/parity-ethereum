@@ -17,8 +17,6 @@
 /// Validator set maintained in a contract, updated using `getValidators` method.
 /// It can also report validators for misbehaviour with two levels: `reportMalicious` and `reportBenign`.
 
-use std::sync::Weak;
-
 use bytes::Bytes;
 use ethereum_types::{H256, Address};
 use parking_lot::RwLock;
@@ -26,6 +24,7 @@ use parking_lot::RwLock;
 use client::EngineClient;
 use header::{Header, BlockNumber};
 use machine::{AuxiliaryData, Call, EthereumMachine};
+use snarc::Weak as SnarcWeak;
 
 use super::{ValidatorSet, SimpleList, SystemCall};
 use super::safe_contract::ValidatorSafeContract;
@@ -36,7 +35,7 @@ use_contract!(validator_report, "res/contracts/validator_report.json");
 pub struct ValidatorContract {
 	contract_address: Address,
 	validators: ValidatorSafeContract,
-	client: RwLock<Option<Weak<EngineClient>>>, // TODO [keorn]: remove
+	client: RwLock<Option<SnarcWeak<EngineClient>>>, // TODO [keorn]: remove
 }
 
 impl ValidatorContract {
@@ -52,7 +51,7 @@ impl ValidatorContract {
 impl ValidatorContract {
 	fn transact(&self, data: Bytes) -> Result<(), String> {
 		let client = self.client.read().as_ref()
-			.and_then(Weak::upgrade)
+			.and_then(SnarcWeak::upgrade)
 			.ok_or_else(|| "No client!")?;
 
 		match client.as_full_client() {
@@ -124,7 +123,7 @@ impl ValidatorSet for ValidatorContract {
 		}
 	}
 
-	fn register_client(&self, client: Weak<EngineClient>) {
+	fn register_client(&self, client: SnarcWeak<EngineClient>) {
 		self.validators.register_client(client.clone());
 		*self.client.write() = Some(client);
 	}
@@ -133,6 +132,7 @@ impl ValidatorSet for ValidatorContract {
 #[cfg(test)]
 mod tests {
 	use std::sync::Arc;
+	use snarc::Snarc;
 	use rustc_hex::FromHex;
 	use hash::keccak;
 	use ethereum_types::{H520, Address};
@@ -152,7 +152,7 @@ mod tests {
 	fn fetches_validators() {
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_validator_contract, None);
 		let vc = Arc::new(ValidatorContract::new("0000000000000000000000000000000000000005".parse::<Address>().unwrap()));
-		vc.register_client(Arc::downgrade(&client) as _);
+		vc.register_client(Snarc::downgrade(&client) as _);
 		let last_hash = client.best_block_header().hash();
 		assert!(vc.contains(&last_hash, &"7d577a597b2742b498cb5cf0c26cdcd726d39e6e".parse::<Address>().unwrap()));
 		assert!(vc.contains(&last_hash, &"82a978b3f5962a5b0957d9ee9eef472ee55b42f1".parse::<Address>().unwrap()));
@@ -163,7 +163,7 @@ mod tests {
 		let tap = Arc::new(AccountProvider::transient_provider());
 		let v1 = tap.insert_account(keccak("1").into(), &"".into()).unwrap();
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_validator_contract, Some(tap.clone()));
-		client.engine().register_client(Arc::downgrade(&client) as _);
+		client.engine().register_client(Snarc::downgrade(&client) as _);
 		let validator_contract = "0000000000000000000000000000000000000005".parse::<Address>().unwrap();
 
 		// Make sure reporting can be done.

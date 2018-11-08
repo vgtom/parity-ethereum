@@ -17,6 +17,7 @@
 //! Service for culling the light client's transaction queue.
 
 use std::sync::Arc;
+use snarc::Snarc;
 use std::time::Duration;
 
 use ethcore::client::ClientIoMessage;
@@ -43,7 +44,7 @@ const PURGE_TIMEOUT: Duration = Duration::from_secs(60 * 9);
 /// Periodically culls the transaction queue of mined transactions.
 pub struct QueueCull<T> {
 	/// A handle to the client, for getting the latest block header.
-	pub client: Arc<T>,
+	pub client: Snarc<T>,
 	/// A handle to the sync service.
 	pub sync: Arc<LightSync>,
 	/// The on-demand request service.

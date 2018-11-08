@@ -19,6 +19,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
+use snarc::Weak as SnarcWeak;
 use std::time::{Duration, Instant};
 
 use parking_lot::{Mutex, MutexGuard};
@@ -141,7 +142,7 @@ pub struct Updater<O = OperationsContractClient, F = fetch::Client, T = StdTimeP
 	// Useful environmental stuff.
 	update_policy: UpdatePolicy,
 	weak_self: Mutex<Weak<Updater<O, F, T, R>>>,
-	client: Weak<BlockChainClient>,
+	client: SnarcWeak<BlockChainClient>,
 	sync: Option<Weak<SyncProvider>>,
 	fetcher: F,
 	operations_client: O,
@@ -193,11 +194,11 @@ pub trait OperationsClient: Send + Sync + 'static {
 
 /// `OperationsClient` that delegates calls to the operations contract.
 pub struct OperationsContractClient {
-	client: Weak<BlockChainClient>,
+	client: SnarcWeak<BlockChainClient>,
 }
 
 impl OperationsContractClient {
-	fn new(client: Weak<BlockChainClient>) -> Self {
+	fn new(client: SnarcWeak<BlockChainClient>) -> Self {
 		OperationsContractClient {
 			client
 		}
@@ -356,7 +357,7 @@ impl GenRange for ThreadRngGenRange {
 impl Updater {
 	/// `Updater` constructor
 	pub fn new(
-		client: &Weak<BlockChainClient>,
+		client: &SnarcWeak<BlockChainClient>,
 		sync: &Weak<SyncProvider>,
 		update_policy: UpdatePolicy,
 		fetcher: fetch::Client,
@@ -708,6 +709,7 @@ pub mod tests {
 	use std::fs::File;
 	use std::io::Read;
 	use std::sync::Arc;
+	use snarc::Snarc;
 	use semver::Version;
 	use tempdir::TempDir;
 	use ethcore::client::{TestBlockChainClient, EachBlockWith};
@@ -809,15 +811,15 @@ pub mod tests {
 	type TestUpdater = Updater<FakeOperationsClient, FakeFetch, FakeTimeProvider, FakeGenRange>;
 
 	fn setup(update_policy: UpdatePolicy) -> (
-		Arc<TestBlockChainClient>,
+		Snarc<TestBlockChainClient>,
 		Arc<TestUpdater>,
 		FakeOperationsClient,
 		FakeFetch,
 		FakeTimeProvider,
 		FakeGenRange) {
 
-		let client = Arc::new(TestBlockChainClient::new());
-		let weak_client = Arc::downgrade(&client);
+		let client = Snarc::new(TestBlockChainClient::new());
+		let weak_client = Snarc::downgrade(&client);
 
 		let operations_client = FakeOperationsClient::new();
 		let fetcher = FakeFetch::new();

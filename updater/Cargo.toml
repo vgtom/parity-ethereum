@@ -23,6 +23,7 @@ parity-hash-fetch = { path = "../hash-fetch" }
 parity-version = { path = "../util/version" }
 parity-path = "0.1"
 rand = "0.4"
+snarc = { git = "https://github.com/mbr/snarc-rs", branch = "c0gent-unsized" }
 
 [dev-dependencies]
 ethcore = { path = "../ethcore", features = ["test-helpers"] }

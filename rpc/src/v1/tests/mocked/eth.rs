@@ -17,6 +17,7 @@
 use std::str::FromStr;
 use std::collections::HashMap;
 use std::sync::Arc;
+use snarc::Snarc;
 use std::time::{Instant, Duration, SystemTime, UNIX_EPOCH};
 
 use ethereum_types::{H160, H256, U256, Address};
@@ -41,9 +42,9 @@ use v1::helpers::dispatch::FullDispatcher;
 use v1::tests::helpers::{TestSyncProvider, Config, TestMinerService, TestSnapshotService};
 use v1::metadata::Metadata;
 
-fn blockchain_client() -> Arc<TestBlockChainClient> {
+fn blockchain_client() -> Snarc<TestBlockChainClient> {
 	let client = TestBlockChainClient::new();
-	Arc::new(client)
+	Snarc::new(client)
 }
 
 fn accounts_provider() -> Arc<AccountProvider> {
@@ -67,7 +68,7 @@ fn snapshot_service() -> Arc<TestSnapshotService> {
 
 struct EthTester {
 	pub runtime: Runtime,
-	pub client: Arc<TestBlockChainClient>,
+	pub client: Snarc<TestBlockChainClient>,
 	pub sync: Arc<TestSyncProvider>,
 	pub accounts_provider: Arc<AccountProvider>,
 	pub miner: Arc<TestMinerService>,

@@ -15,6 +15,7 @@ kvdb = "0.1"
 log = "0.4"
 stop-guard = { path = "../../util/stop-guard" }
 trace-time = "0.1"
+snarc = { git = "https://github.com/mbr/snarc-rs", branch = "c0gent-unsized" }
 
 [dev-dependencies]
 ethcore = { path = "..", features = ["test-helpers"] }

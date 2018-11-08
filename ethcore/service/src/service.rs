@@ -17,6 +17,7 @@
 //! Creates and registers client and network services.
 
 use std::sync::Arc;
+use snarc::Snarc;
 use std::path::Path;
 use std::time::Duration;
 
@@ -79,7 +80,7 @@ impl PrivateTxHandler for PrivateTxService {
 /// Client service setup. Creates and registers client and network services with the IO subsystem.
 pub struct ClientService {
 	io_service: Arc<IoService<ClientIoMessage>>,
-	client: Arc<Client>,
+	client: Snarc<Client>,
 	snapshot: Arc<SnapshotService>,
 	private_tx: Arc<PrivateTxService>,
 	database: Arc<BlockChainDB>,
@@ -137,7 +138,7 @@ impl ClientService {
 		});
 		io_service.register_handler(client_io)?;
 
-		spec.engine.register_client(Arc::downgrade(&client) as _);
+		spec.engine.register_client(Snarc::downgrade(&client) as _);
 
 		let stop_guard = StopGuard::new();
 
@@ -157,7 +158,7 @@ impl ClientService {
 	}
 
 	/// Get client interface
-	pub fn client(&self) -> Arc<Client> {
+	pub fn client(&self) -> Snarc<Client> {
 		self.client.clone()
 	}
 
@@ -192,7 +193,7 @@ impl ClientService {
 
 /// IO interface for the Client handler
 struct ClientIoHandler {
-	client: Arc<Client>,
+	client: Snarc<Client>,
 	snapshot: Arc<SnapshotService>,
 }
 

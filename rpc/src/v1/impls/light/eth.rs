@@ -18,6 +18,7 @@
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
+use snarc::Snarc;
 
 use jsonrpc_core::{Result, BoxFuture};
 use jsonrpc_core::futures::{future, Future};
@@ -58,7 +59,7 @@ const NO_INVALID_BACK_REFS: &str = "Fails only on invalid back-references; back-
 /// Light client `ETH` (and filter) RPC.
 pub struct EthClient<T> {
 	sync: Arc<LightSync>,
-	client: Arc<T>,
+	client: Snarc<T>,
 	on_demand: Arc<OnDemand>,
 	transaction_queue: Arc<RwLock<TransactionQueue>>,
 	accounts: Arc<AccountProvider>,
@@ -90,7 +91,7 @@ impl<T: LightChainClient + 'static> EthClient<T> {
 	/// and on-demand request service, which is assumed to be attached as a handler.
 	pub fn new(
 		sync: Arc<LightSync>,
-		client: Arc<T>,
+		client: Snarc<T>,
 		on_demand: Arc<OnDemand>,
 		transaction_queue: Arc<RwLock<TransactionQueue>>,
 		accounts: Arc<AccountProvider>,
@@ -543,7 +544,7 @@ impl<T: LightChainClient + 'static> Filterable for EthClient<T> {
 	}
 }
 
-fn extract_uncle_at_index<T: LightChainClient>(block: encoded::Block, index: Index, client: Arc<T>) -> Option<RichBlock> {
+fn extract_uncle_at_index<T: LightChainClient>(block: encoded::Block, index: Index, client: Snarc<T>) -> Option<RichBlock> {
 		let uncle = match block.uncles().into_iter().nth(index.value()) {
 			Some(u) => u,
 			None => return None,

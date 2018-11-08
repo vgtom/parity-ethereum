@@ -17,6 +17,7 @@
 //! Helpers for submit a POW work.
 
 use std::sync::Arc;
+use snarc::Snarc;
 
 use rlp;
 use ethcore::miner::{BlockChainClient, MinerService};
@@ -26,7 +27,7 @@ use v1::types::{H64, H256};
 use v1::helpers::errors;
 
 // Submit a POW work and return the block's hash
-pub fn submit_work_detail<C: BlockChainClient, M: MinerService>(client: &Arc<C>, miner: &Arc<M>, nonce: H64, pow_hash: H256, mix_hash: H256) -> Result<H256, Error> {
+pub fn submit_work_detail<C: BlockChainClient, M: MinerService>(client: &Snarc<C>, miner: &Arc<M>, nonce: H64, pow_hash: H256, mix_hash: H256) -> Result<H256, Error> {
 	// TODO [ToDr] Should disallow submissions in case of PoA?
 	let nonce: EthcoreH64 = nonce.into();
 	let pow_hash: EthcoreH256 = pow_hash.into();

@@ -18,6 +18,7 @@
 //! give as much data as necessary to its peers.
 
 use std::sync::Arc;
+use snarc::Snarc;
 
 use ethcore::blockchain_info::BlockChainInfo;
 use ethcore::client::{BlockChainClient, ProvingBlockChainClient, ChainInfo, BlockInfo as ClientBlockInfo};
@@ -302,13 +303,13 @@ impl<T: ProvingBlockChainClient + ?Sized> Provider for T {
 /// The light client "provider" implementation. This wraps a `LightClient` and
 /// a light transaction queue.
 pub struct LightProvider<L> {
-	client: Arc<L>,
+	client: Snarc<L>,
 	txqueue: Arc<RwLock<TransactionQueue>>,
 }
 
 impl<L> LightProvider<L> {
 	/// Create a new `LightProvider` from the given client and transaction queue.
-	pub fn new(client: Arc<L>, txqueue: Arc<RwLock<TransactionQueue>>) -> Self {
+	pub fn new(client: Snarc<L>, txqueue: Arc<RwLock<TransactionQueue>>) -> Self {
 		LightProvider {
 			client,
 			txqueue,

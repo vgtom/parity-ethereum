@@ -16,6 +16,7 @@
 
 use std::any::Any;
 use std::sync::{Arc, Weak};
+use snarc::{Snarc, Weak as SnarcWeak};
 use std::time::{Duration, Instant};
 use std::thread;
 
@@ -259,7 +260,7 @@ fn execute_light_impl(cmd: RunCmd, logger: Arc<RotatingLogger>) -> Result<Runnin
 	net_conf.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());
 	let sync_params = LightSyncParams {
 		network_config: net_conf.into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?,
-		client: Arc::new(provider),
+		client: Snarc::new(provider),
 		network_id: cmd.network_id.unwrap_or(spec.network_id()),
 		subprotocol_name: sync::LIGHT_PROTOCOL,
 		handlers: vec![on_demand.clone()],
@@ -577,7 +578,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	// take handle to private transactions service
 	let private_tx_service = service.private_tx_service();
 	let private_tx_provider = private_tx_service.provider();
-	let connection_filter = connection_filter_address.map(|a| Arc::new(NodeFilter::new(Arc::downgrade(&client) as Weak<BlockChainClient>, a)));
+	let connection_filter = connection_filter_address.map(|a| Arc::new(NodeFilter::new(Snarc::downgrade(&client) as _, a)));
 	let snapshot_service = service.snapshot_service();
 
 	// initialize the local node information store.
@@ -623,7 +624,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 
 	// start stratum
 	if let Some(ref stratum_config) = cmd.stratum {
-		stratum::Stratum::register(stratum_config, miner.clone(), Arc::downgrade(&client))
+		stratum::Stratum::register(stratum_config, miner.clone(), Snarc::downgrade(&client))
 			.map_err(|e| format!("Stratum start error: {:?}", e))?;
 	}
 
@@ -668,7 +669,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	}
 
 	let contract_client = {
-		struct FullRegistrar { client: Arc<Client> }
+		struct FullRegistrar { client: Snarc<Client> }
 		impl RegistrarClient for FullRegistrar {
 			type Call = Asynchronous;
 			fn registrar_address(&self) -> Result<Address, String> {
@@ -686,7 +687,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	// the updater service
 	let updater_fetch = fetch.clone();
 	let updater = Updater::new(
-		&Arc::downgrade(&(service.client() as Arc<BlockChainClient>)),
+		&Snarc::downgrade(&(service.client() as Snarc<BlockChainClient>)),
 		&Arc::downgrade(&sync_provider),
 		update_policy,
 		hash_fetch::Client::with_fetch(contract_client.clone(), updater_fetch, runtime.executor())
@@ -741,7 +742,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 		account_provider: account_provider,
 		accounts_passwords: &passwords,
 	};
-	let secretstore_key_server = secretstore::start(cmd.secretstore_conf.clone(), secretstore_deps)?;
+	let secretstore_key_server = secretstore::start(cmd.secretstore_conf.clone(), secretstore_deps, runtime.executor())?;
 
 	// the ipfs server
 	let ipfs_server = ipfs::start_server(cmd.ipfs_conf.clone(), client.clone())?;
@@ -804,7 +805,8 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 			informant,
 			client,
 			client_service: Arc::new(service),
-			keep_alive: Box::new((watcher, updater, ws_server, http_server, ipc_server, secretstore_key_server, ipfs_server, runtime)),
+			keep_alive: Box::new((watcher, updater, ws_server, http_server, ipc_server, secretstore_key_server, ipfs_server)),
+			runtime,
 		}
 	})
 }
@@ -821,14 +823,15 @@ enum RunningClientInner {
 	Light {
 		rpc: jsonrpc_core::MetaIoHandler<Metadata, informant::Middleware<rpc_apis::LightClientNotifier>>,
 		informant: Arc<Informant<LightNodeInformantData>>,
-		client: Arc<LightClient>,
+		client: Snarc<LightClient>,
 		keep_alive: Box<Any>,
 	},
 	Full {
 		rpc: jsonrpc_core::MetaIoHandler<Metadata, informant::Middleware<informant::ClientNotifier>>,
 		informant: Arc<Informant<FullNodeInformantData>>,
-		client: Arc<Client>,
+		client: Snarc<Client>,
 		client_service: Arc<ClientService>,
+		runtime: Runtime,
 		keep_alive: Box<Any>,
 	},
 }
@@ -858,7 +861,7 @@ impl RunningClient {
 			RunningClientInner::Light { rpc, informant, client, keep_alive } => {
 				// Create a weak reference to the client so that we can wait on shutdown
 				// until it is dropped
-				let weak_client = Arc::downgrade(&client);
+				let weak_client = Snarc::downgrade(&client);
 				drop(rpc);
 				drop(keep_alive);
 				informant.shutdown();
@@ -866,11 +869,11 @@ impl RunningClient {
 				drop(client);
 				wait_for_drop(weak_client);
 			},
-			RunningClientInner::Full { rpc, informant, client, client_service, keep_alive } => {
+			RunningClientInner::Full { rpc, informant, client, client_service, runtime, keep_alive } => {
 				info!("Finishing work, please wait...");
 				// Create a weak reference to the client so that we can wait on shutdown
 				// until it is dropped
-				let weak_client = Arc::downgrade(&client);
+				let weak_client = Snarc::downgrade(&client);
 				// Shutdown and drop the ServiceClient
 				client_service.shutdown();
 				drop(client_service);
@@ -882,7 +885,10 @@ impl RunningClient {
 				// just Arc is dropping here, to allow other reference release in its default time
 				drop(informant);
 				drop(client);
+				drop(runtime);
+				info!("####### Waiting for all client refs to drop...");
 				wait_for_drop(weak_client);
+				info!("####### Client fully dropped...");
 			}
 		}
 	}
@@ -1005,7 +1011,7 @@ fn build_create_account_hint(spec: &SpecType, keys: &str) -> String {
 	format!("You can create an account via RPC, UI or `parity account new --chain {} --keys-path {}`.", spec, keys)
 }
 
-fn wait_for_drop<T>(w: Weak<T>) {
+fn wait_for_drop<T>(w: SnarcWeak<T>) {
 	let sleep_duration = Duration::from_secs(1);
 	let warn_timeout = Duration::from_secs(60);
 	let max_timeout = Duration::from_secs(300);
@@ -1014,8 +1020,9 @@ fn wait_for_drop<T>(w: Weak<T>) {
 	let mut warned = false;
 
 	while instant.elapsed() < max_timeout {
-		if w.upgrade().is_none() {
-			return;
+		match w.upgrade() {
+			Some(_) => {},
+			None => return,
 		}
 
 		if !warned && instant.elapsed() > warn_timeout {

@@ -36,7 +36,8 @@ pub use self::instant_seal::{InstantSeal, InstantSealParams};
 pub use self::null_engine::NullEngine;
 pub use self::tendermint::Tendermint;
 
-use std::sync::{Weak, Arc};
+use std::sync::Arc;
+use snarc::Weak as SnarcWeak;
 use std::collections::{BTreeMap, HashMap};
 use std::{fmt, error};
 
@@ -395,7 +396,7 @@ pub trait Engine<M: Machine>: Sync + Send {
 	fn sign(&self, _hash: H256) -> Result<Signature, M::Error> { unimplemented!() }
 
 	/// Add Client which can be used for sealing, potentially querying the state and sending messages.
-	fn register_client(&self, _client: Weak<M::EngineClient>) {}
+	fn register_client(&self, _client: SnarcWeak<M::EngineClient>) {}
 
 	/// Trigger next step of the consensus engine.
 	fn step(&self) {}

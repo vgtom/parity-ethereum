@@ -18,6 +18,7 @@
 
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
+use snarc::Snarc;
 
 use light_sync::*;
 use tests::helpers::{TestNet, Peer as PeerLike, TestPacket};
@@ -73,8 +74,8 @@ impl<'a> IoContext for TestIoContext<'a> {
 
 // peer-specific data.
 enum PeerData {
-	Light(Arc<LightSync<LightClient>>, Arc<LightClient>),
-	Full(Arc<TestBlockChainClient>)
+	Light(Arc<LightSync<LightClient>>, Snarc<LightClient>),
+	Full(Snarc<TestBlockChainClient>)
 }
 
 // test peer type.
@@ -88,7 +89,7 @@ pub struct Peer {
 impl Peer {
 	// create a new full-client peer for light client peers to sync to.
 	// buffer flow is made negligible.
-	pub fn new_full(chain: Arc<TestBlockChainClient>) -> Self {
+	pub fn new_full(chain: Snarc<TestBlockChainClient>) -> Self {
 		let params = LightParams {
 			network_id: NETWORK_ID,
 			config: Default::default(),
@@ -110,7 +111,7 @@ impl Peer {
 	}
 
 	// create a new light-client peer to sync to full peers.
-	pub fn new_light(chain: Arc<LightClient>) -> Self {
+	pub fn new_light(chain: Snarc<LightClient>) -> Self {
 		let sync = Arc::new(LightSync::new(chain.clone()).unwrap());
 		let params = LightParams {
 			network_id: NETWORK_ID,
@@ -125,7 +126,7 @@ impl Peer {
 		};
 
 		let provider = LightProvider::new(chain.clone(), Arc::new(RwLock::new(Default::default())));
-		let mut proto = LightProtocol::new(Arc::new(provider), params);
+		let mut proto = LightProtocol::new(Snarc::new(provider), params);
 		proto.add_handler(sync.clone());
 		Peer {
 			proto: proto,
@@ -235,11 +236,11 @@ impl TestNet<Peer> {
 				cache
 			).expect("New DB creation infallible; qed");
 
-			peers.push(Arc::new(Peer::new_light(Arc::new(client))))
+			peers.push(Arc::new(Peer::new_light(Snarc::new(client))))
 		}
 
 		for _ in 0..n_full {
-			peers.push(Arc::new(Peer::new_full(Arc::new(TestBlockChainClient::new()))))
+			peers.push(Arc::new(Peer::new_full(Snarc::new(TestBlockChainClient::new()))))
 		}
 
 		TestNet {

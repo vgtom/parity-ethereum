@@ -17,6 +17,7 @@
 use std::thread;
 use std::str::FromStr;
 use std::sync::Arc;
+use snarc::Snarc;
 use std::time::Duration;
 use rlp;
 
@@ -44,7 +45,7 @@ use parity_runtime::{Runtime, Executor};
 struct SigningTester {
 	pub runtime: Runtime,
 	pub signer: Arc<SignerService>,
-	pub client: Arc<TestBlockChainClient>,
+	pub client: Snarc<TestBlockChainClient>,
 	pub miner: Arc<TestMinerService>,
 	pub accounts: Arc<AccountProvider>,
 	pub io: IoHandler<Metadata>,
@@ -54,7 +55,7 @@ impl Default for SigningTester {
 	fn default() -> Self {
 		let runtime = Runtime::with_thread_count(1);
 		let signer = Arc::new(SignerService::new_test(false));
-		let client = Arc::new(TestBlockChainClient::default());
+		let client = Snarc::new(TestBlockChainClient::default());
 		let miner = Arc::new(TestMinerService::default());
 		let accounts = Arc::new(AccountProvider::transient_provider());
 		let reservations = Arc::new(Mutex::new(nonce::Reservations::new(runtime.executor())));

@@ -16,6 +16,8 @@
 
 //! Smart contract based node filter.
 
+#![allow(deprecated)]
+
 extern crate ethabi;
 extern crate ethcore;
 extern crate ethcore_network as network;
@@ -23,6 +25,7 @@ extern crate ethcore_network_devp2p as devp2p;
 extern crate ethereum_types;
 extern crate lru_cache;
 extern crate parking_lot;
+extern crate snarc;
 
 #[macro_use]
 extern crate ethabi_derive;
@@ -37,7 +40,7 @@ extern crate tempdir;
 #[macro_use]
 extern crate log;
 
-use std::sync::Weak;
+use snarc::Weak as SnarcWeak;
 
 use lru_cache::LruCache;
 use parking_lot::Mutex;
@@ -54,14 +57,14 @@ const MAX_CACHE_SIZE: usize = 4096;
 
 /// Connection filter that uses a contract to manage permissions.
 pub struct NodeFilter {
-	client: Weak<BlockChainClient>,
+	client: SnarcWeak<BlockChainClient>,
 	contract_address: Address,
 	permission_cache: Mutex<LruCache<(H256, NodeId), bool>>,
 }
 
 impl NodeFilter {
 	/// Create a new instance. Accepts a contract address.
-	pub fn new(client: Weak<BlockChainClient>, contract_address: Address) -> NodeFilter {
+	pub fn new(client: SnarcWeak<BlockChainClient>, contract_address: Address) -> NodeFilter {
 		NodeFilter {
 			client,
 			contract_address,
@@ -111,6 +114,7 @@ impl ConnectionFilter for NodeFilter {
 #[cfg(test)]
 mod test {
 	use std::sync::{Arc, Weak};
+	use snarc::Snarc;
 	use ethcore::spec::Spec;
 	use ethcore::client::{BlockChainClient, Client, ClientConfig};
 	use ethcore::miner::Miner;
@@ -136,7 +140,7 @@ mod test {
 			Arc::new(Miner::new_for_tests(&spec, None)),
 			IoChannel::disconnected(),
 		).unwrap();
-		let filter = NodeFilter::new(Arc::downgrade(&client) as Weak<BlockChainClient>, contract_addr);
+		let filter = NodeFilter::new(Snarc::downgrade(&client) as _, contract_addr);
 		let self1: NodeId = "00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002".into();
 		let self2: NodeId = "00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000003".into();
 		let node1: NodeId = "00000000000000000000000000000000000000000000000000000000000000110000000000000000000000000000000000000000000000000000000000000012".into();

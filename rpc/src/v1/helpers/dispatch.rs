@@ -19,6 +19,7 @@
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
+use snarc::Snarc;
 
 use light::cache::Cache as LightDataCache;
 use light::client::LightChainClient;
@@ -84,7 +85,7 @@ pub trait Dispatcher: Send + Sync + Clone {
 /// requests locally.
 #[derive(Debug)]
 pub struct FullDispatcher<C, M> {
-	client: Arc<C>,
+	client: Snarc<C>,
 	miner: Arc<M>,
 	nonces: Arc<Mutex<nonce::Reservations>>,
 	gas_price_percentile: usize,
@@ -93,7 +94,7 @@ pub struct FullDispatcher<C, M> {
 impl<C, M> FullDispatcher<C, M> {
 	/// Create a `FullDispatcher` from Arc references to a client and miner.
 	pub fn new(
-		client: Arc<C>,
+		client: Snarc<C>,
 		miner: Arc<M>,
 		nonces: Arc<Mutex<nonce::Reservations>>,
 		gas_price_percentile: usize,
@@ -191,7 +192,7 @@ impl<C: miner::BlockChainClient + BlockChainClient, M: MinerService> Dispatcher 
 // TODO: this could be `impl Trait`.
 pub fn fetch_gas_price_corpus(
 	sync: Arc<LightSync>,
-	client: Arc<LightChainClient>,
+	client: Snarc<LightChainClient>,
 	on_demand: Arc<OnDemand>,
 	cache: Arc<Mutex<LightDataCache>>,
 ) -> BoxFuture<Corpus<U256>> {
@@ -254,7 +255,7 @@ pub struct LightDispatcher {
 	/// Sync service.
 	pub sync: Arc<LightSync>,
 	/// Header chain client.
-	pub client: Arc<LightChainClient>,
+	pub client: Snarc<LightChainClient>,
 	/// On-demand request service.
 	pub on_demand: Arc<OnDemand>,
 	/// Data cache.
@@ -273,7 +274,7 @@ impl LightDispatcher {
 	/// For correct operation, the OnDemand service is assumed to be registered as a network handler,
 	pub fn new(
 		sync: Arc<LightSync>,
-		client: Arc<LightChainClient>,
+		client: Snarc<LightChainClient>,
 		on_demand: Arc<OnDemand>,
 		cache: Arc<Mutex<LightDataCache>>,
 		transaction_queue: Arc<RwLock<LightTransactionQueue>>,

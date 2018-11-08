@@ -16,6 +16,7 @@
 
 use std::collections::{VecDeque, HashSet, HashMap};
 use std::sync::Arc;
+use snarc::Snarc;
 use std::time::Duration;
 use ethereum_types::H256;
 use parking_lot::{RwLock, Mutex};
@@ -207,7 +208,7 @@ pub trait Peer {
 }
 
 pub struct EthPeer<C> where C: FlushingBlockChainClient {
-	pub chain: Arc<C>,
+	pub chain: Snarc<C>,
 	pub miner: Arc<Miner>,
 	pub snapshot_service: Arc<TestSnapshotService>,
 	pub sync: RwLock<ChainSync>,
@@ -344,7 +345,7 @@ impl TestNet<EthPeer<TestBlockChainClient>> {
 			net.peers.push(Arc::new(EthPeer {
 				sync: RwLock::new(sync),
 				snapshot_service: ss,
-				chain: Arc::new(chain),
+				chain: Snarc::new(chain),
 				miner: Arc::new(Miner::new_for_tests(&Spec::new_test(), None)),
 				queue: RwLock::new(VecDeque::new()),
 				private_tx_handler,
@@ -507,12 +508,12 @@ impl<C: FlushingBlockChainClient> TestNet<EthPeer<C>> {
 }
 
 pub struct TestIoHandler {
-	pub client: Arc<EthcoreClient>,
+	pub client: Snarc<EthcoreClient>,
 	pub private_tx_queued: Mutex<usize>,
 }
 
 impl TestIoHandler {
-	pub fn new(client: Arc<EthcoreClient>) -> Self {
+	pub fn new(client: Snarc<EthcoreClient>) -> Self {
 		TestIoHandler {
 			client,
 			private_tx_queued: Mutex::default(),

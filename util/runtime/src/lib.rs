@@ -17,7 +17,7 @@
 //! Tokio Runtime wrapper.
 
 extern crate futures;
-extern crate tokio;
+pub extern crate tokio;
 
 use std::{fmt, thread};
 use std::sync::mpsc;
@@ -46,6 +46,8 @@ impl Runtime {
 			tx.send(runtime.executor()).expect("Rx is blocking upper thread.");
 			runtime.block_on(futures::empty().select(stopped).map(|_| ()).map_err(|_| ()))
 				.expect("Tokio runtime should not have unhandled errors.");
+			runtime.shutdown_now().wait().unwrap();
+			println!("######## Runtime has shut down...");
 		});
 		let executor = rx.recv().expect("tx is transfered to a newly spawned thread.");
 
@@ -236,6 +238,7 @@ impl From<Runtime> for RuntimeHandle {
 
 impl Drop for RuntimeHandle {
 	fn drop(&mut self) {
+		println!("######## Attempting to stop runtime...");
 		self.close.take().map(|v| v.send(()));
 	}
 }
@@ -249,6 +252,7 @@ impl RuntimeHandle {
 
 	/// Finishes this runtime.
 	pub fn close(mut self) {
+		println!("######## Attempting to stop runtime...");
 		let _ = self.close.take()
 			.expect("Close is taken only in `close` and `drop`. `close` is consuming; qed")
 			.send(());

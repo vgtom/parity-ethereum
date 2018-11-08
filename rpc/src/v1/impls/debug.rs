@@ -16,7 +16,7 @@
 
 //! Debug APIs RPC implementation
 
-use std::sync::Arc;
+use snarc::Snarc;
 
 use ethcore::client::BlockChainClient;
 use transaction::LocalizedTransaction;
@@ -27,12 +27,12 @@ use v1::types::{Block, Bytes, RichBlock, BlockTransactions, Transaction};
 
 /// Debug rpc implementation.
 pub struct DebugClient<C> {
-	client: Arc<C>,
+	client: Snarc<C>,
 }
 
 impl<C> DebugClient<C> {
 	/// Creates new debug client.
-	pub fn new(client: Arc<C>) -> Self {
+	pub fn new(client: Snarc<C>) -> Self {
 		Self {
 			client,
 		}

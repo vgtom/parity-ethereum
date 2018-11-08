@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::Arc;
+use snarc::Snarc;
 
 use ethcore::client::BlockChainClient;
 use sync::{self, AttachedProtocol, SyncConfig, NetworkConfiguration, Params, ConnectionFilter};
@@ -30,10 +31,10 @@ pub type SyncModules = (Arc<SyncProvider>, Arc<ManageNetwork>, Arc<ChainNotify>)
 pub fn sync(
 	sync_cfg: SyncConfig,
 	net_cfg: NetworkConfiguration,
-	client: Arc<BlockChainClient>,
+	client: Snarc<BlockChainClient>,
 	snapshot_service: Arc<SnapshotService>,
 	private_tx_handler: Arc<PrivateTxHandler>,
-	provider: Arc<Provider>,
+	provider: Snarc<Provider>,
 	_log_settings: &LogConfig,
 	attached_protos: Vec<AttachedProtocol>,
 	connection_filter: Option<Arc<ConnectionFilter>>,

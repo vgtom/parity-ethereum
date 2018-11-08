@@ -19,6 +19,7 @@ use std::cmp;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Arc, Weak};
+use snarc::Snarc;
 use std::time::{Instant, Duration};
 
 // util
@@ -709,7 +710,7 @@ impl Client {
 		db: Arc<BlockChainDB>,
 		miner: Arc<Miner>,
 		message_channel: IoChannel<ClientIoMessage>,
-	) -> Result<Arc<Client>, ::error::Error> {
+	) -> Result<Snarc<Client>, ::error::Error> {
 		let trie_spec = match config.fat_db {
 			true => TrieSpec::Fat,
 			false => TrieSpec::Secure,
@@ -762,7 +763,7 @@ impl Client {
 			trace!(target: "client", "Found registrar at {}", addr);
 		}
 
-		let client = Arc::new(Client {
+		let client = Snarc::new(Client {
 			enabled: AtomicBool::new(true),
 			sleep_state: Mutex::new(SleepState::new(awake)),
 			liveness: AtomicBool::new(awake),

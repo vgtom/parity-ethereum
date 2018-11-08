@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::Arc;
+use snarc::Snarc;
 
 use ethcore::client::TestBlockChainClient;
 
@@ -22,7 +22,7 @@ use jsonrpc_core::IoHandler;
 use v1::{Debug, DebugClient};
 
 fn io() -> IoHandler {
-	let client = Arc::new(TestBlockChainClient::new());
+	let client = Snarc::new(TestBlockChainClient::new());
 
 	let mut io = IoHandler::new();
 	io.extend_with(DebugClient::new(client).to_delegate());

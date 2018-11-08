@@ -16,7 +16,8 @@
 
 //! A blockchain engine that supports a basic, non-BFT proof-of-authority.
 
-use std::sync::{Weak, Arc};
+use std::sync::Arc;
+use snarc::Weak as SnarcWeak;
 use ethereum_types::{H256, H520, Address};
 use parking_lot::RwLock;
 use ethkey::{self, Password, Signature};
@@ -186,7 +187,7 @@ impl Engine<EthereumMachine> for BasicAuthority {
 		}
 	}
 
-	fn register_client(&self, client: Weak<EngineClient>) {
+	fn register_client(&self, client: SnarcWeak<EngineClient>) {
 		self.validators.register_client(client);
 	}
 

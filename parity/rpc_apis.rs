@@ -18,6 +18,7 @@ use std::cmp::PartialEq;
 use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 use std::sync::{Arc, Weak};
+use snarc::Snarc;
 
 pub use parity_rpc::signer::SignerService;
 
@@ -215,7 +216,7 @@ pub trait Dependencies {
 /// RPC dependencies for a full node.
 pub struct FullDependencies {
 	pub signer_service: Arc<SignerService>,
-	pub client: Arc<Client>,
+	pub client: Snarc<Client>,
 	pub snapshot: Arc<SnapshotService>,
 	pub sync: Arc<SyncProvider>,
 	pub net: Arc<ManageNetwork>,
@@ -427,7 +428,7 @@ impl ActivityNotifier for LightClientNotifier {
 /// RPC dependencies for a light client.
 pub struct LightDependencies<T> {
 	pub signer_service: Arc<SignerService>,
-	pub client: Arc<T>,
+	pub client: Snarc<T>,
 	pub sync: Arc<LightSync>,
 	pub net: Arc<ManageNetwork>,
 	pub secret_store: Arc<AccountProvider>,

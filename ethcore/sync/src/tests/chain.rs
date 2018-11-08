@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::Arc;
+use snarc::Snarc;
 use ethcore::client::{TestBlockChainClient, BlockChainClient, BlockId, EachBlockWith, ChainInfo, BlockInfo};
 use chain::{SyncState};
 use super::helpers::*;
@@ -104,7 +104,7 @@ fn forked_with_misbehaving_peer() {
 	let mut alt_spec = ::ethcore::spec::Spec::new_test();
 	alt_spec.extra_data = b"fork".to_vec();
 	// peer 0 is on a totally different chain with higher total difficulty
-	net.peer_mut(0).chain = Arc::new(TestBlockChainClient::new_with_spec(alt_spec));
+	net.peer_mut(0).chain = Snarc::new(TestBlockChainClient::new_with_spec(alt_spec));
 	net.peer(0).chain.add_blocks(50, EachBlockWith::Nothing);
 	net.peer(1).chain.add_blocks(10, EachBlockWith::Nothing);
 	net.peer(2).chain.add_blocks(10, EachBlockWith::Nothing);

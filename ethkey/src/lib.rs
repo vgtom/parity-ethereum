@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 // #![warn(missing_docs)]
+#![allow(deprecated)]
 
 extern crate byteorder;
 extern crate edit_distance;

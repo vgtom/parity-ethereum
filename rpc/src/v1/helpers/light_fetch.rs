@@ -18,6 +18,7 @@
 
 use std::cmp;
 use std::sync::Arc;
+use snarc::Snarc;
 
 use light::on_demand::error::Error as OnDemandError;
 use ethcore::basic_account::BasicAccount;
@@ -68,7 +69,7 @@ pub fn light_all_transactions(dispatch: &Arc<dispatch::LightDispatcher>) -> impl
 #[derive(Clone)]
 pub struct LightFetch {
 	/// The light client.
-	pub client: Arc<LightChainClient>,
+	pub client: Snarc<LightChainClient>,
 	/// The on-demand request service.
 	pub on_demand: Arc<OnDemand>,
 	/// Handle to the network.

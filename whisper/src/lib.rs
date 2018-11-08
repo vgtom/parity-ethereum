@@ -17,6 +17,8 @@
 //! Whisper P2P messaging system as a DevP2P subprotocol, with RPC and Rust
 //! interface.
 
+#![allow(deprecated)]
+
 extern crate byteorder;
 extern crate parity_crypto as crypto;
 extern crate ethcore_network as network;

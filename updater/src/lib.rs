@@ -31,6 +31,7 @@ extern crate parity_path;
 extern crate rand;
 extern crate semver;
 extern crate target_info;
+extern crate snarc;
 
 #[macro_use]
 extern crate ethabi_contract;

@@ -16,6 +16,8 @@
 
 //! `JournalDB` interface and implementation.
 
+#![allow(deprecated)]
+
 extern crate heapsize;
 #[macro_use]
 extern crate log;

@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 #![warn(missing_docs)]
+#![allow(deprecated)]
 
 //! Blockchain sync module
 //! Implements ethereum protocol version 63 as specified here:
@@ -36,6 +37,7 @@ extern crate parking_lot;
 extern crate rlp;
 extern crate keccak_hash as hash;
 extern crate triehash_ethereum;
+extern crate snarc;
 
 extern crate ethcore_light as light;
 

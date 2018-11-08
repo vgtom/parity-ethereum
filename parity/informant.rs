@@ -15,10 +15,12 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 extern crate ansi_term;
+
 use self::ansi_term::Colour::{White, Yellow, Green, Cyan, Blue};
 use self::ansi_term::{Colour, Style};
 
 use std::sync::{Arc};
+use snarc::Snarc;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering as AtomicOrdering};
 use std::time::{Instant, Duration};
 
@@ -118,7 +120,7 @@ pub trait InformantData: Send + Sync {
 
 /// Informant data for a full node.
 pub struct FullNodeInformantData {
-	pub client: Arc<Client>,
+	pub client: Snarc<Client>,
 	pub sync: Option<Arc<SyncProvider>>,
 	pub net: Option<Arc<ManageNetwork>>,
 }
@@ -175,7 +177,7 @@ impl InformantData for FullNodeInformantData {
 
 /// Informant data for a light node -- note that the network is required.
 pub struct LightNodeInformantData {
-	pub client: Arc<LightChainClient>,
+	pub client: Snarc<LightChainClient>,
 	pub sync: Arc<LightSync>,
 	pub cache: Arc<Mutex<LightDataCache>>,
 }

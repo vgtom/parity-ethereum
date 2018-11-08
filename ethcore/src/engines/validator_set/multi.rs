@@ -17,7 +17,7 @@
 /// Validator set changing at fork blocks.
 
 use std::collections::BTreeMap;
-use std::sync::Weak;
+// use std::sync::Weak;
 use ethereum_types::{H256, Address};
 use parking_lot::RwLock;
 use bytes::Bytes;
@@ -26,6 +26,7 @@ use header::{BlockNumber, Header};
 use client::EngineClient;
 use machine::{AuxiliaryData, Call, EthereumMachine};
 use super::{SystemCall, ValidatorSet};
+use snarc::Weak as SnarcWeak;
 
 type BlockNumberLookup = Box<Fn(BlockId) -> Result<BlockNumber, String> + Send + Sync + 'static>;
 
@@ -131,7 +132,7 @@ impl ValidatorSet for Multi {
 		self.correct_set_by_number(set_block).1.report_benign(validator, set_block, block);
 	}
 
-	fn register_client(&self, client: Weak<EngineClient>) {
+	fn register_client(&self, client: SnarcWeak<EngineClient>) {
 		for set in self.sets.values() {
 			set.register_client(client.clone());
 		}
@@ -145,6 +146,7 @@ impl ValidatorSet for Multi {
 #[cfg(test)]
 mod tests {
 	use std::sync::Arc;
+	use snarc::Snarc;
 	use std::collections::BTreeMap;
 	use hash::keccak;
 	use account_provider::AccountProvider;
@@ -169,7 +171,7 @@ mod tests {
 		let v0 = tap.insert_account(s0.clone(), &"".into()).unwrap();
 		let v1 = tap.insert_account(keccak("1").into(), &"".into()).unwrap();
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_validator_multi, Some(tap));
-		client.engine().register_client(Arc::downgrade(&client) as _);
+		client.engine().register_client(Snarc::downgrade(&client) as _);
 
 		// Make sure txs go through.
 		client.miner().set_gas_range_target((1_000_000.into(), 1_000_000.into()));
@@ -197,7 +199,7 @@ mod tests {
 
 		// Check syncing.
 		let sync_client = generate_dummy_client_with_spec_and_data(Spec::new_validator_multi, 0, 0, &[]);
-		sync_client.engine().register_client(Arc::downgrade(&sync_client) as _);
+		sync_client.engine().register_client(Snarc::downgrade(&sync_client) as _);
 		for i in 1..4 {
 			sync_client.import_block(Unverified::from_rlp(client.block(BlockId::Number(i)).unwrap().into_inner()).unwrap()).unwrap();
 		}

@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::Arc;
+use snarc::Snarc;
 use std::collections::{HashMap, BTreeMap};
 use std::io;
 use std::ops::Range;
@@ -233,13 +234,13 @@ pub struct Params {
 	/// Configuration.
 	pub config: SyncConfig,
 	/// Blockchain client.
-	pub chain: Arc<BlockChainClient>,
+	pub chain: Snarc<BlockChainClient>,
 	/// Snapshot service.
 	pub snapshot_service: Arc<SnapshotService>,
 	/// Private tx service.
 	pub private_tx_handler: Arc<PrivateTxHandler>,
 	/// Light data provider.
-	pub provider: Arc<::light::Provider>,
+	pub provider: Snarc<::light::Provider>,
 	/// Network layer configuration.
 	pub network_config: NetworkConfiguration,
 	/// Other protocols to attach.
@@ -260,6 +261,12 @@ pub struct EthSync {
 	subprotocol_name: [u8; 3],
 	/// Light subprotocol name.
 	light_subprotocol_name: [u8; 3],
+}
+
+impl Drop for EthSync {
+	fn drop(&mut self) {
+		info!("###### Dropping EthSync");
+	}
 }
 
 fn light_params(
@@ -387,7 +394,7 @@ const TX_TIMER: TimerToken = 2;
 
 struct SyncProtocolHandler {
 	/// Shared blockchain client.
-	chain: Arc<BlockChainClient>,
+	chain: Snarc<BlockChainClient>,
 	/// Shared snapshot service.
 	snapshot_service: Arc<SnapshotService>,
 	/// Sync strategy
@@ -539,7 +546,7 @@ impl ChainNotify for EthSync {
 
 /// PIP event handler.
 /// Simply queues transactions from light client peers.
-struct TxRelay(Arc<BlockChainClient>);
+struct TxRelay(Snarc<BlockChainClient>);
 
 impl LightHandler for TxRelay {
 	fn on_transactions(&self, ctx: &EventContext, relay: &[::transaction::UnverifiedTransaction]) {
@@ -758,7 +765,7 @@ pub struct LightSyncParams<L> {
 	/// Network configuration.
 	pub network_config: BasicNetworkConfiguration,
 	/// Light client to sync to.
-	pub client: Arc<L>,
+	pub client: Snarc<L>,
 	/// Network ID.
 	pub network_id: u64,
 	/// Subprotocol name.

@@ -19,6 +19,7 @@
 use std::thread;
 use std::time::{Instant, Duration, SystemTime, UNIX_EPOCH};
 use std::sync::Arc;
+use snarc::Snarc;
 
 use rlp::Rlp;
 use ethereum_types::{U256, H256, Address};
@@ -98,7 +99,7 @@ pub struct EthClient<C, SN: ?Sized, S: ?Sized, M, EM> where
 	M: MinerService,
 	EM: ExternalMinerService {
 
-	client: Arc<C>,
+	client: Snarc<C>,
 	snapshot: Arc<SN>,
 	sync: Arc<S>,
 	accounts: Arc<AccountProvider>,
@@ -150,7 +151,7 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> EthClient<C, SN, S
 
 	/// Creates new EthClient.
 	pub fn new(
-		client: &Arc<C>,
+		client: &Snarc<C>,
 		snapshot: &Arc<SN>,
 		sync: &Arc<S>,
 		accounts: &Arc<AccountProvider>,

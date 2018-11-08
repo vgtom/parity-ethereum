@@ -16,7 +16,7 @@
 
 //! Traces api implementation.
 
-use std::sync::Arc;
+use snarc::Snarc;
 
 use ethcore::client::{BlockChainClient, CallAnalytics, TransactionId, TraceId, StateClient, StateInfo, Call, BlockId};
 use rlp::Rlp;
@@ -39,12 +39,12 @@ fn to_call_analytics(flags: TraceOptions) -> CallAnalytics {
 
 /// Traces api implementation.
 pub struct TracesClient<C> {
-	client: Arc<C>,
+	client: Snarc<C>,
 }
 
 impl<C> TracesClient<C> {
 	/// Creates new Traces client.
-	pub fn new(client: &Arc<C>) -> Self {
+	pub fn new(client: &Snarc<C>) -> Self {
 		TracesClient {
 			client: client.clone(),
 		}

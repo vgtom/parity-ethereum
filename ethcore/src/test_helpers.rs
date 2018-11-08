@@ -18,6 +18,7 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use snarc::Snarc;
 use std::{fs, io};
 use account_provider::AccountProvider;
 use ethereum_types::{H256, U256, Address};
@@ -97,27 +98,27 @@ pub fn create_test_block_with_data(header: &Header, transactions: &[SignedTransa
 }
 
 /// Generates dummy client (not test client) with corresponding amount of blocks
-pub fn generate_dummy_client(block_number: u32) -> Arc<Client> {
+pub fn generate_dummy_client(block_number: u32) -> Snarc<Client> {
 	generate_dummy_client_with_spec_and_data(Spec::new_test, block_number, 0, &[])
 }
 
 /// Generates dummy client (not test client) with corresponding amount of blocks and txs per every block
-pub fn generate_dummy_client_with_data(block_number: u32, txs_per_block: usize, tx_gas_prices: &[U256]) -> Arc<Client> {
+pub fn generate_dummy_client_with_data(block_number: u32, txs_per_block: usize, tx_gas_prices: &[U256]) -> Snarc<Client> {
 	generate_dummy_client_with_spec_and_data(Spec::new_null, block_number, txs_per_block, tx_gas_prices)
 }
 
 /// Generates dummy client (not test client) with corresponding amount of blocks, txs per block and spec
-pub fn generate_dummy_client_with_spec_and_data<F>(test_spec: F, block_number: u32, txs_per_block: usize, tx_gas_prices: &[U256]) -> Arc<Client> where F: Fn()->Spec {
+pub fn generate_dummy_client_with_spec_and_data<F>(test_spec: F, block_number: u32, txs_per_block: usize, tx_gas_prices: &[U256]) -> Snarc<Client> where F: Fn()->Spec {
 	generate_dummy_client_with_spec_accounts_and_data(test_spec, None, block_number, txs_per_block, tx_gas_prices)
 }
 
 /// Generates dummy client (not test client) with corresponding spec and accounts
-pub fn generate_dummy_client_with_spec_and_accounts<F>(test_spec: F, accounts: Option<Arc<AccountProvider>>) -> Arc<Client> where F: Fn()->Spec {
+pub fn generate_dummy_client_with_spec_and_accounts<F>(test_spec: F, accounts: Option<Arc<AccountProvider>>) -> Snarc<Client> where F: Fn()->Spec {
 	generate_dummy_client_with_spec_accounts_and_data(test_spec, accounts, 0, 0, &[])
 }
 
 /// Generates dummy client (not test client) with corresponding blocks, accounts and spec
-pub fn generate_dummy_client_with_spec_accounts_and_data<F>(test_spec: F, accounts: Option<Arc<AccountProvider>>, block_number: u32, txs_per_block: usize, tx_gas_prices: &[U256]) -> Arc<Client> where F: Fn()->Spec {
+pub fn generate_dummy_client_with_spec_accounts_and_data<F>(test_spec: F, accounts: Option<Arc<AccountProvider>>, block_number: u32, txs_per_block: usize, tx_gas_prices: &[U256]) -> Snarc<Client> where F: Fn()->Spec {
 	let test_spec = test_spec();
 	let client_db = new_db();
 
@@ -189,7 +190,7 @@ pub fn generate_dummy_client_with_spec_accounts_and_data<F>(test_spec: F, accoun
 }
 
 /// Adds blocks to the client
-pub fn push_blocks_to_client(client: &Arc<Client>, timestamp_salt: u64, starting_number: usize, block_number: usize) {
+pub fn push_blocks_to_client(client: &Snarc<Client>, timestamp_salt: u64, starting_number: usize, block_number: usize) {
 	let test_spec = Spec::new_test();
 	let state_root = test_spec.genesis_header().state_root().clone();
 	let genesis_gas = test_spec.genesis_header().gas_limit().clone();
@@ -219,7 +220,7 @@ pub fn push_blocks_to_client(client: &Arc<Client>, timestamp_salt: u64, starting
 }
 
 /// Adds one block with transactions
-pub fn push_block_with_transactions(client: &Arc<Client>, transactions: &[SignedTransaction]) {
+pub fn push_block_with_transactions(client: &Snarc<Client>, transactions: &[SignedTransaction]) {
 	let test_spec = Spec::new_test();
 	let test_engine = &*test_spec.engine;
 	let block_number = client.chain_info().best_block_number as u64 + 1;
@@ -241,7 +242,7 @@ pub fn push_block_with_transactions(client: &Arc<Client>, transactions: &[Signed
 }
 
 /// Creates dummy client (not test client) with corresponding blocks
-pub fn get_test_client_with_blocks(blocks: Vec<Bytes>) -> Arc<Client> {
+pub fn get_test_client_with_blocks(blocks: Vec<Bytes>) -> Snarc<Client> {
 	let test_spec = Spec::new_test();
 	let client_db = new_db();
 

@@ -17,6 +17,7 @@
 extern crate multihash;
 extern crate cid;
 extern crate unicase;
+extern crate snarc;
 
 extern crate rlp;
 extern crate ethcore;
@@ -29,7 +30,8 @@ pub mod error;
 mod route;
 
 use std::thread;
-use std::sync::{mpsc, Arc};
+use std::sync::mpsc;
+use snarc::Snarc;
 use std::net::{SocketAddr, IpAddr};
 
 use core::futures::future::{self, FutureResult};
@@ -51,7 +53,7 @@ pub struct IpfsHandler {
 	/// Hostnames allowed in the `Host` request header
 	allowed_hosts: Option<Vec<Host>>,
 	/// Reference to the Blockchain Client
-	client: Arc<BlockChainClient>,
+	client: Snarc<BlockChainClient>,
 }
 
 impl IpfsHandler {
@@ -59,7 +61,7 @@ impl IpfsHandler {
 		&*self.client
 	}
 
-	pub fn new(cors: DomainsValidation<AccessControlAllowOrigin>, hosts: DomainsValidation<Host>, client: Arc<BlockChainClient>) -> Self {
+	pub fn new(cors: DomainsValidation<AccessControlAllowOrigin>, hosts: DomainsValidation<Host>, client: Snarc<BlockChainClient>) -> Self {
 		IpfsHandler {
 			cors_domains: cors.into(),
 			allowed_hosts: hosts.into(),
@@ -154,7 +156,7 @@ pub fn start_server(
 	interface: String,
 	cors: DomainsValidation<AccessControlAllowOrigin>,
 	hosts: DomainsValidation<Host>,
-	client: Arc<BlockChainClient>
+	client: Snarc<BlockChainClient>
 ) -> Result<Listening, ServerError> {
 
 	let ip: IpAddr = interface.parse().map_err(|_| ServerError::InvalidInterface)?;

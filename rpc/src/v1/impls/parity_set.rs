@@ -17,6 +17,7 @@
 /// Parity-specific rpc interface for operations altering the settings.
 use std::io;
 use std::sync::Arc;
+use snarc::Snarc;
 use std::time::Duration;
 
 use ethcore::client::{BlockChainClient, Mode};
@@ -34,7 +35,7 @@ use v1::types::{Bytes, H160, H256, U256, ReleaseInfo, Transaction};
 
 /// Parity-specific rpc interface for operations altering the settings.
 pub struct ParitySetClient<C, M, U, F = fetch::Client> {
-	client: Arc<C>,
+	client: Snarc<C>,
 	miner: Arc<M>,
 	updater: Arc<U>,
 	net: Arc<ManageNetwork>,
@@ -46,7 +47,7 @@ impl<C, M, U, F> ParitySetClient<C, M, U, F>
 {
 	/// Creates new `ParitySetClient` with given `Fetch`.
 	pub fn new(
-		client: &Arc<C>,
+		client: &Snarc<C>,
 		miner: &Arc<M>,
 		updater: &Arc<U>,
 		net: &Arc<ManageNetwork>,

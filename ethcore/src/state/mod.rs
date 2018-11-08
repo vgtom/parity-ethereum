@@ -1153,7 +1153,7 @@ impl<B: Backend> State<B> {
 						let accountdb = self.factories.accountdb.readonly(self.db.as_hashdb(), addr_hash);
 
 						// FIXME (Issue #9838): update_account_cache can fail in rare cases, but we cannot return error in RefMut wrapper.
-						Self::update_account_cache(RequireCache::Code, account, &self.db, accountdb.as_hashdb());
+						let _ = Self::update_account_cache(RequireCache::Code, account, &self.db, accountdb.as_hashdb());
 					}
 					account
 				},

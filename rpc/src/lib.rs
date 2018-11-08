@@ -67,6 +67,7 @@ extern crate eip712;
 extern crate rlp;
 extern crate stats;
 extern crate vm;
+extern crate snarc;
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android"))]
 extern crate hardware_wallet;

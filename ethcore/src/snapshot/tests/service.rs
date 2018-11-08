@@ -17,6 +17,7 @@
 //! Tests for the snapshot service.
 
 use std::sync::Arc;
+use snarc::Snarc;
 
 use tempdir::TempDir;
 use client::{Client, BlockInfo};
@@ -120,7 +121,7 @@ fn guards_delete_folders() {
 		pruning: ::journaldb::Algorithm::Archive,
 		channel: IoChannel::disconnected(),
 		snapshot_root: tempdir.path().to_owned(),
-		db_restore: Arc::new(NoopDBRestore),
+		db_restore: Snarc::new(NoopDBRestore),
 	};
 
 	let service = Service::new(service_params).unwrap();

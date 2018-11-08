@@ -17,6 +17,7 @@
 //! Eth PUB-SUB rpc implementation.
 
 use std::sync::{Arc, Weak};
+use snarc::Snarc;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -56,7 +57,7 @@ pub struct EthPubSubClient<C> {
 
 impl<C> EthPubSubClient<C> {
 	/// Creates new `EthPubSubClient`.
-	pub fn new(client: Arc<C>, executor: Executor) -> Self {
+	pub fn new(client: Snarc<C>, executor: Executor) -> Self {
 		let heads_subscribers = Arc::new(RwLock::new(Subscribers::default()));
 		let logs_subscribers = Arc::new(RwLock::new(Subscribers::default()));
 		let transactions_subscribers = Arc::new(RwLock::new(Subscribers::default()));
@@ -77,7 +78,7 @@ impl<C> EthPubSubClient<C> {
 
 	/// Creates new `EthPubSubCient` with deterministic subscription ids.
 	#[cfg(test)]
-	pub fn new_test(client: Arc<C>, executor: Executor) -> Self {
+	pub fn new_test(client: Snarc<C>, executor: Executor) -> Self {
 		let client = Self::new(client, executor);
 		*client.heads_subscribers.write() = Subscribers::new_test();
 		*client.logs_subscribers.write() = Subscribers::new_test();
@@ -94,7 +95,7 @@ impl<C> EthPubSubClient<C> {
 impl EthPubSubClient<LightFetch> {
 	/// Creates a new `EthPubSubClient` for `LightClient`.
 	pub fn light(
-		client: Arc<LightChainClient>,
+		client: Snarc<LightChainClient>,
 		on_demand: Arc<OnDemand>,
 		sync: Arc<LightSync>,
 		cache: Arc<Mutex<Cache>>,
@@ -108,13 +109,13 @@ impl EthPubSubClient<LightFetch> {
 			cache,
 			gas_price_percentile,
 		};
-		EthPubSubClient::new(Arc::new(fetch), executor)
+		EthPubSubClient::new(Snarc::new(fetch), executor)
 	}
 }
 
 /// PubSub Notification handler.
 pub struct ChainNotificationHandler<C> {
-	client: Arc<C>,
+	client: Snarc<C>,
 	executor: Executor,
 	heads_subscribers: Arc<RwLock<Subscribers<Client>>>,
 	logs_subscribers: Arc<RwLock<Subscribers<(Client, EthFilter)>>>,

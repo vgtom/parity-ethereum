@@ -18,6 +18,7 @@
 
 use std::cell::RefCell;
 use std::sync::Arc;
+use snarc::Snarc;
 use std::str::FromStr;
 
 use account_provider::AccountProvider;
@@ -87,14 +88,14 @@ enum Transition {
 }
 
 // create a chain with the given transitions and some blocks beyond that transition.
-fn make_chain(accounts: Arc<AccountProvider>, blocks_beyond: usize, transitions: Vec<Transition>) -> Arc<Client> {
+fn make_chain(accounts: Arc<AccountProvider>, blocks_beyond: usize, transitions: Vec<Transition>) -> Snarc<Client> {
 	let client = generate_dummy_client_with_spec_and_accounts(
 		spec_fixed_to_contract, Some(accounts.clone()));
 
 	let mut cur_signers = vec![*RICH_ADDR];
 	{
 		let engine = client.engine();
-		engine.register_client(Arc::downgrade(&client) as _);
+		engine.register_client(Snarc::downgrade(&client) as _);
 	}
 
 	{

@@ -17,6 +17,7 @@
 //! Ethereum key-management.
 
 #![warn(missing_docs)]
+#![allow(deprecated)]
 
 extern crate dir;
 extern crate itertools;

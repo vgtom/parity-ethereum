@@ -19,6 +19,7 @@
 // Recursion limit required because of
 // error_chain foreign_links.
 #![recursion_limit="256"]
+#![allow(deprecated)]
 
 mod encryptor;
 mod private_transactions;
@@ -46,6 +47,7 @@ extern crate patricia_trie_ethereum as ethtrie;
 extern crate rlp;
 extern crate url;
 extern crate rustc_hex;
+extern crate snarc;
 #[macro_use]
 extern crate log;
 #[macro_use]
@@ -68,6 +70,7 @@ pub use messages::{PrivateTransaction, SignedPrivateTransaction};
 pub use error::{Error, ErrorKind};
 
 use std::sync::{Arc, Weak};
+use snarc::Snarc;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use ethereum_types::{H128, H256, U256, Address};
@@ -133,7 +136,7 @@ pub struct Provider {
 	notify: RwLock<Vec<Weak<ChainNotify>>>,
 	transactions_for_signing: RwLock<SigningStore>,
 	transactions_for_verification: VerificationStore,
-	client: Arc<Client>,
+	client: Snarc<Client>,
 	miner: Arc<Miner>,
 	accounts: Arc<AccountProvider>,
 	channel: IoChannel<ClientIoMessage>,
@@ -150,7 +153,7 @@ pub struct PrivateExecutionResult<T, V> where T: Tracer, V: VMTracer {
 impl Provider where {
 	/// Create a new provider.
 	pub fn new(
-		client: Arc<Client>,
+		client: Snarc<Client>,
 		miner: Arc<Miner>,
 		accounts: Arc<AccountProvider>,
 		encryptor: Box<Encryptor>,

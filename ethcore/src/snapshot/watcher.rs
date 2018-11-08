@@ -24,7 +24,8 @@ use io::IoChannel;
 use ethereum_types::H256;
 use bytes::Bytes;
 
-use std::{sync::Arc, time::Duration};
+use std::{time::Duration};
+use snarc::Snarc;
 
 // helper trait for transforming hashes to numbers and checking if syncing.
 trait Oracle: Send + Sync {
@@ -34,7 +35,7 @@ trait Oracle: Send + Sync {
 }
 
 struct StandardOracle<F> where F: 'static + Send + Sync + Fn() -> bool {
-	client: Arc<Client>,
+	client: Snarc<Client>,
 	sync_status: F,
 }
 
@@ -83,7 +84,7 @@ impl Watcher {
 	/// Create a new `Watcher` which will trigger a snapshot event
 	/// once every `period` blocks, but only after that block is
 	/// `history` blocks old.
-	pub fn new<F>(client: Arc<Client>, sync_status: F, channel: IoChannel<ClientIoMessage>, period: u64, history: u64) -> Self
+	pub fn new<F>(client: Snarc<Client>, sync_status: F, channel: IoChannel<ClientIoMessage>, period: u64, history: u64) -> Self
 		where F: 'static + Send + Sync + Fn() -> bool
 	{
 		Watcher {

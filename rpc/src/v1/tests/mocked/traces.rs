@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::Arc;
+use snarc::Snarc;
 
 use ethcore::executed::{Executed, CallError};
 use ethcore::trace::trace::{Action, Res, Call};
@@ -28,13 +29,13 @@ use v1::tests::helpers::{TestMinerService};
 use v1::{Metadata, Traces, TracesClient};
 
 struct Tester {
-	client: Arc<TestBlockChainClient>,
+	client: Snarc<TestBlockChainClient>,
 	_miner: Arc<TestMinerService>,
 	io: IoHandler<Metadata>,
 }
 
 fn io() -> Tester {
-	let client = Arc::new(TestBlockChainClient::new());
+	let client = Snarc::new(TestBlockChainClient::new());
 	*client.traces.write() = Some(vec![LocalizedTrace {
 		action: Action::Call(Call {
 			from: 0xf.into(),

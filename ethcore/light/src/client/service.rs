@@ -17,8 +17,10 @@
 //! Minimal IO service for light client.
 //! Just handles block import messages and passes them to the client.
 
+
 use std::fmt;
 use std::sync::Arc;
+use snarc::Snarc;
 
 use ethcore::client::ClientIoMessage;
 use ethcore::{db, BlockChainDB};
@@ -58,7 +60,7 @@ impl fmt::Display for Error {
 
 /// Light client service.
 pub struct Service<T> {
-	client: Arc<Client<T>>,
+	client: Snarc<Client<T>>,
 	io_service: IoService<ClientIoMessage>,
 }
 
@@ -66,7 +68,7 @@ impl<T: ChainDataFetcher> Service<T> {
 	/// Start the service: initialize I/O workers and client itself.
 	pub fn start(config: ClientConfig, spec: &Spec, fetcher: T, db: Arc<BlockChainDB>, cache: Arc<Mutex<Cache>>) -> Result<Self, Error> {
 		let io_service = IoService::<ClientIoMessage>::start().map_err(Error::Io)?;
-		let client = Arc::new(Client::new(config,
+		let client = Snarc::new(Client::new(config,
 			db.key_value().clone(),
 			db::COL_LIGHT_CHAIN,
 			spec,
@@ -76,7 +78,7 @@ impl<T: ChainDataFetcher> Service<T> {
 		)?);
 
 		io_service.register_handler(Arc::new(ImportBlocks(client.clone()))).map_err(Error::Io)?;
-		spec.engine.register_client(Arc::downgrade(&client) as _);
+		spec.engine.register_client(Snarc::downgrade(&client) as _);
 
 		Ok(Service {
 			client,
@@ -95,12 +97,12 @@ impl<T: ChainDataFetcher> Service<T> {
 	}
 
 	/// Get a handle to the client.
-	pub fn client(&self) -> &Arc<Client<T>> {
+	pub fn client(&self) -> &Snarc<Client<T>> {
 		&self.client
 	}
 }
 
-struct ImportBlocks<T>(Arc<Client<T>>);
+struct ImportBlocks<T>(Snarc<Client<T>>);
 
 impl<T: ChainDataFetcher> IoHandler<ClientIoMessage> for ImportBlocks<T> {
 	fn message(&self, _io: &IoContext<ClientIoMessage>, message: &ClientIoMessage) {

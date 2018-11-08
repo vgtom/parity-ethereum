@@ -29,11 +29,12 @@ use memory_cache::MemoryLruCache;
 use parking_lot::RwLock;
 use receipt::Receipt;
 use rlp::{Rlp, RlpStream};
-use std::sync::{Weak, Arc};
+use std::sync::Arc;
 use super::{SystemCall, ValidatorSet};
 use super::simple_list::SimpleList;
 use unexpected::Mismatch;
 use ethabi::FunctionOutputDecoder;
+use snarc::Weak as SnarcWeak;
 
 use_contract!(validator_set, "res/contracts/validator_set.json");
 
@@ -73,7 +74,7 @@ impl ::engines::StateDependentProof<EthereumMachine> for StateProof {
 pub struct ValidatorSafeContract {
 	contract_address: Address,
 	validators: RwLock<MemoryLruCache<H256, SimpleList>>,
-	client: RwLock<Option<Weak<EngineClient>>>, // TODO [keorn]: remove
+	client: RwLock<Option<SnarcWeak<EngineClient>>>, // TODO [keorn]: remove
 }
 
 // first proof is just a state proof call of `getValidators` at header's state.
@@ -278,7 +279,7 @@ impl ValidatorSet for ValidatorSafeContract {
 	fn default_caller(&self, id: BlockId) -> Box<Call> {
 		let client = self.client.read().clone();
 		Box::new(move |addr, data| client.as_ref()
-			.and_then(Weak::upgrade)
+			.and_then(SnarcWeak::upgrade)
 			.ok_or_else(|| "No client!".into())
 			.and_then(|c| {
 				match c.as_full_client() {
@@ -429,7 +430,7 @@ impl ValidatorSet for ValidatorSafeContract {
 				 }))
 	}
 
-	fn register_client(&self, client: Weak<EngineClient>) {
+	fn register_client(&self, client: SnarcWeak<EngineClient>) {
 		trace!(target: "engine", "Setting up contract caller.");
 		*self.client.write() = Some(client);
 	}
@@ -438,6 +439,7 @@ impl ValidatorSet for ValidatorSafeContract {
 #[cfg(test)]
 mod tests {
 	use std::sync::Arc;
+	use snarc::Snarc;
 	use rustc_hex::FromHex;
 	use hash::keccak;
 	use ethereum_types::Address;
@@ -457,7 +459,7 @@ mod tests {
 	fn fetches_validators() {
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_validator_safe_contract, None);
 		let vc = Arc::new(ValidatorSafeContract::new("0000000000000000000000000000000000000005".parse::<Address>().unwrap()));
-		vc.register_client(Arc::downgrade(&client) as _);
+		vc.register_client(Snarc::downgrade(&client) as _);
 		let last_hash = client.best_block_header().hash();
 		assert!(vc.contains(&last_hash, &"7d577a597b2742b498cb5cf0c26cdcd726d39e6e".parse::<Address>().unwrap()));
 		assert!(vc.contains(&last_hash, &"82a978b3f5962a5b0957d9ee9eef472ee55b42f1".parse::<Address>().unwrap()));
@@ -471,7 +473,7 @@ mod tests {
 		let v1 = tap.insert_account(keccak("0").into(), &"".into()).unwrap();
 		let chain_id = Spec::new_validator_safe_contract().chain_id();
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_validator_safe_contract, Some(tap));
-		client.engine().register_client(Arc::downgrade(&client) as _);
+		client.engine().register_client(Snarc::downgrade(&client) as _);
 		let validator_contract = "0000000000000000000000000000000000000005".parse::<Address>().unwrap();
 
 		client.miner().set_author(v1, Some("".into())).unwrap();
@@ -522,7 +524,7 @@ mod tests {
 
 		// Check syncing.
 		let sync_client = generate_dummy_client_with_spec_and_data(Spec::new_validator_safe_contract, 0, 0, &[]);
-		sync_client.engine().register_client(Arc::downgrade(&sync_client) as _);
+		sync_client.engine().register_client(Snarc::downgrade(&sync_client) as _);
 		for i in 1..4 {
 			sync_client.import_block(Unverified::from_rlp(client.block(BlockId::Number(i)).unwrap().into_inner()).unwrap()).unwrap();
 		}

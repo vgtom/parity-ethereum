@@ -18,6 +18,7 @@ use std::cmp;
 use std::time::{Instant, Duration};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
+use snarc::Snarc;
 
 use ansi_term::Colour;
 use bytes::Bytes;
@@ -297,10 +298,10 @@ impl Miner {
 	}
 
 	/// Sets in-blockchain checker for transactions.
-	pub fn set_in_chain_checker<C>(&self, chain: &Arc<C>) where
+	pub fn set_in_chain_checker<C>(&self, chain: &Snarc<C>) where
 		C: TransactionInfo + Send + Sync + 'static,
 	{
-		let client = Arc::downgrade(chain);
+		let client = Snarc::downgrade(chain);
 		self.transaction_queue.set_in_chain_checker(move |hash| {
 			match client.upgrade() {
 				Some(info) => info.transaction_block(TransactionId::Hash(*hash)).is_some(),
@@ -576,7 +577,7 @@ impl Miner {
 		trace!(target: "miner", "requires_reseal: sealing enabled");
 
 		// Disable sealing if there were no requests for SEALING_TIMEOUT_IN_BLOCKS
-		let had_requests = sealing.last_request.map(|last_request| 
+		let had_requests = sealing.last_request.map(|last_request|
 			best_block.saturating_sub(last_request) <= SEALING_TIMEOUT_IN_BLOCKS
 		).unwrap_or(false);
 

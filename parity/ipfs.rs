@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::Arc;
+use snarc::Snarc;
 use parity_ipfs_api::{self, AccessControlAllowOrigin, Host, Listening};
 use parity_ipfs_api::error::ServerError;
 use ethcore::client::BlockChainClient;
@@ -40,7 +40,7 @@ impl Default for Configuration {
 	}
 }
 
-pub fn start_server(conf: Configuration, client: Arc<BlockChainClient>) -> Result<Option<Listening>, ServerError> {
+pub fn start_server(conf: Configuration, client: Snarc<BlockChainClient>) -> Result<Option<Listening>, ServerError> {
 	if !conf.enabled {
 		return Ok(None);
 	}

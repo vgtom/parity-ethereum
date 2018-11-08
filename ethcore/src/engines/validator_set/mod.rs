@@ -23,7 +23,7 @@ mod safe_contract;
 mod contract;
 mod multi;
 
-use std::sync::Weak;
+use snarc::Weak as SnarcWeak;
 use ids::BlockId;
 use ethereum_types::{H256, Address};
 use bytes::Bytes;
@@ -138,5 +138,5 @@ pub trait ValidatorSet: Send + Sync + 'static {
 	/// Notifies about benign misbehaviour.
 	fn report_benign(&self, _validator: &Address, _set_block: BlockNumber, _block: BlockNumber) {}
 	/// Allows blockchain state access.
-	fn register_client(&self, _client: Weak<EngineClient>) {}
+	fn register_client(&self, _client: SnarcWeak<EngineClient>) {}
 }

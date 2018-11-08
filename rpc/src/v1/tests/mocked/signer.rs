@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::Arc;
+use snarc::Snarc;
 use std::str::FromStr;
 use ethereum_types::{U256, Address};
 use bytes::ToPretty;
@@ -43,9 +44,9 @@ struct SignerTester {
 	miner: Arc<TestMinerService>,
 }
 
-fn blockchain_client() -> Arc<TestBlockChainClient> {
+fn blockchain_client() -> Snarc<TestBlockChainClient> {
 	let client = TestBlockChainClient::new();
-	Arc::new(client)
+	Snarc::new(client)
 }
 
 fn accounts_provider() -> Arc<AccountProvider> {

@@ -34,7 +34,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::mem;
-use std::sync::Arc;
+use snarc::Snarc;
 use std::time::{Instant, Duration};
 
 use ethcore::encoded;
@@ -233,7 +233,7 @@ pub struct LightSync<L: AsLightClient> {
 	best_seen: Mutex<Option<ChainInfo>>, // best seen block on the network.
 	peers: RwLock<HashMap<PeerId, Mutex<Peer>>>, // peers which are relevant to synchronization.
 	pending_reqs: Mutex<HashMap<ReqId, PendingReq>>, // requests from this handler
-	client: Arc<L>,
+	client: Snarc<L>,
 	rng: Mutex<OsRng>,
 	state: Mutex<SyncState>,
 }
@@ -643,7 +643,7 @@ impl<L: AsLightClient> LightSync<L> {
 	///
 	/// This won't do anything until registered as a handler
 	/// so it can act on events.
-	pub fn new(client: Arc<L>) -> Result<Self, ::std::io::Error> {
+	pub fn new(client: Snarc<L>) -> Result<Self, ::std::io::Error> {
 		Ok(LightSync {
 			start_block_number: client.as_light_client().chain_info().best_block_number,
 			best_seen: Mutex::new(None),

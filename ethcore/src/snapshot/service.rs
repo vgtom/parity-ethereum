@@ -21,6 +21,7 @@ use std::io::{self, Read, ErrorKind};
 use std::fs::{self, File};
 use std::path::PathBuf;
 use std::sync::Arc;
+use snarc::Snarc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use super::{ManifestData, StateRebuilder, Rebuilder, RestorationStatus, SnapshotService, MAX_CHUNK_SIZE};
@@ -219,7 +220,7 @@ pub struct ServiceParams {
 	/// Usually "<chain hash>/snapshot"
 	pub snapshot_root: PathBuf,
 	/// A handle for database restoration.
-	pub db_restore: Arc<DatabaseRestore>,
+	pub db_restore: Snarc<DatabaseRestore>,
 }
 
 /// `SnapshotService` implementation.
@@ -236,7 +237,7 @@ pub struct Service {
 	genesis_block: Bytes,
 	state_chunks: AtomicUsize,
 	block_chunks: AtomicUsize,
-	db_restore: Arc<DatabaseRestore>,
+	db_restore: Snarc<DatabaseRestore>,
 	progress: super::Progress,
 	taking_snapshot: AtomicBool,
 	restoring_snapshot: AtomicBool,
@@ -752,7 +753,7 @@ impl Drop for Service {
 
 #[cfg(test)]
 mod tests {
-	use std::sync::Arc;
+	use snarc::Snarc;
 	use client::ClientIoMessage;
 	use io::{IoService};
 	use spec::Spec;
@@ -785,7 +786,7 @@ mod tests {
 			pruning: Algorithm::Archive,
 			channel: service.channel(),
 			snapshot_root: dir,
-			db_restore: Arc::new(NoopDBRestore),
+			db_restore: Snarc::new(NoopDBRestore),
 		};
 
 		let service = Service::new(snapshot_params).unwrap();

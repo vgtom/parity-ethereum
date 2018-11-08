@@ -116,11 +116,12 @@ fn get_param<'a>(query: &'a str, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
 	use std::sync::Arc;
+	use snarc::Snarc;
 	use super::*;
 	use ethcore::client::TestBlockChainClient;
 
 	fn get_mocked_handler() -> IpfsHandler {
-		IpfsHandler::new(None.into(), None.into(), Arc::new(TestBlockChainClient::new()))
+		IpfsHandler::new(None.into(), None.into(), Snarc::new(TestBlockChainClient::new()))
 	}
 
 	#[test]

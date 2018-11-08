@@ -32,7 +32,7 @@ use request::*;
 use rlp::{Rlp, RlpStream};
 use transaction::{Action, PendingTransaction};
 
-use std::sync::Arc;
+use snarc::Snarc;
 use std::time::Instant;
 
 // helper for encoding a single request into a packet.
@@ -94,7 +94,7 @@ impl IoContext for Expect {
 }
 
 // can't implement directly for Arc due to cross-crate orphan rules.
-struct TestProvider(Arc<TestProviderInner>);
+struct TestProvider(Snarc<TestProviderInner>);
 
 struct TestProviderInner {
 	client: TestBlockChainClient,
@@ -199,12 +199,12 @@ fn write_free_handshake(status: &Status, capabilities: &Capabilities, proto: &Li
 }
 
 // helper for setting up the protocol handler and provider.
-fn setup(capabilities: Capabilities) -> (Arc<TestProviderInner>, LightProtocol) {
-	let provider = Arc::new(TestProviderInner {
+fn setup(capabilities: Capabilities) -> (Snarc<TestProviderInner>, LightProtocol) {
+	let provider = Snarc::new(TestProviderInner {
 		client: TestBlockChainClient::new(),
 	});
 
-	let proto = LightProtocol::new(Arc::new(TestProvider(provider.clone())), Params {
+	let proto = LightProtocol::new(Snarc::new(TestProvider(provider.clone())), Params {
 		network_id: 2,
 		config: Default::default(),
 		capabilities: capabilities,

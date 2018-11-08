@@ -17,6 +17,7 @@
 //! rpc integration tests.
 use std::env;
 use std::sync::Arc;
+use snarc::Snarc;
 
 use ethereum_types::{H256, Address};
 use ethcore::account_provider::AccountProvider;
@@ -76,7 +77,7 @@ fn make_spec(chain: &BlockChain) -> Spec {
 
 struct EthTester {
 	_runtime: Runtime,
-	client: Arc<Client>,
+	client: Snarc<Client>,
 	_miner: Arc<Miner>,
 	_snapshot: Arc<TestSnapshotService>,
 	accounts: Arc<AccountProvider>,
