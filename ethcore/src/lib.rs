@@ -112,7 +112,6 @@ extern crate vm;
 extern crate wasm;
 extern crate memory_cache;
 extern crate journaldb;
-extern crate serde;
 #[cfg(any(test, feature = "json-tests", feature = "test-helpers"))]
 extern crate tempdir;
 extern crate futures;
@@ -142,8 +141,6 @@ extern crate macros;
 extern crate rlp_derive;
 #[macro_use]
 extern crate trace_time;
-#[macro_use]
-extern crate serde_derive;
 // #[macro_use]
 extern crate failure;
 
