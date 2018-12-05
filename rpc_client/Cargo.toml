@@ -13,8 +13,14 @@ serde = "1.0"
 serde_json = "1.0"
 url = "1.2.0"
 matches = "0.1"
+<<<<<<< HEAD
 parking_lot = "0.7"
 jsonrpc-core = { git = "https://github.com/paritytech/jsonrpc.git", rev = "207a277" }
 jsonrpc-ws-server = { git = "https://github.com/paritytech/jsonrpc.git", rev = "207a277" }
+=======
+parking_lot = "0.6"
+jsonrpc-core = { git = "https://github.com/paritytech/jsonrpc.git", rev = "903eda7" }
+jsonrpc-ws-server = { git = "https://github.com/paritytech/jsonrpc.git", rev = "903eda7" }
+>>>>>>> Deploy and call a test contract.
 parity-rpc = { path = "../rpc" }
 keccak-hash = "0.1"
