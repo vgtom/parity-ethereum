@@ -751,7 +751,6 @@ impl Configuration {
 	fn net_config(&self) -> Result<NetworkConfiguration, String> {
 		let mut ret = NetworkConfiguration::new();
 		ret.nat_enabled = self.args.arg_nat == "any" || self.args.arg_nat == "upnp";
-		// println!("####### LOADING BOOTNODES FROM: {:?}", self.args.arg_bootnodes);
 		ret.boot_nodes = to_bootnodes(&self.args.arg_bootnodes)?;
 		let (listen, public) = self.net_addresses()?;
 		ret.listen_address = Some(format!("{}", listen));
@@ -772,7 +771,6 @@ impl Configuration {
 		let mut net_path = PathBuf::from(self.directories().base);
 		net_path.push("network");
 		ret.config_path = Some(net_path.to_str().unwrap().to_owned());
-		// println!("####### LOADING RESERVED NODES FROM: {:?}", self.args.arg_reserved_peers);
 		ret.reserved_nodes = self.init_reserved_nodes()?;
 		ret.allow_non_reserved = !self.args.flag_reserved_only;
 		ret.client_version = {

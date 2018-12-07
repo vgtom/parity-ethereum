@@ -483,7 +483,7 @@ impl Miner {
 		let block_start = Instant::now();
 
 		for transaction in pending {
-			debug!("####### MINER::PREPARE_BLOCK_FROM: Processing pending transaction: {:?}.", transaction);
+			debug!("MINER::PREPARE_BLOCK_FROM: Processing pending transaction: {:?}.", transaction);
 			let start = Instant::now();
 
 			let hash = transaction.hash();
@@ -699,7 +699,7 @@ impl Miner {
 					.lock()
 					.seal(&*self.engine, seal)
 					.map(|sealed| {
-						debug!("###### IMPORTING SEALED BLOCK: \n\
+						debug!("IMPORTING SEALED BLOCK: \n\
 							header: {:?} \n\
 							state: {:?} \n\
 							transactions: {:?}\n",

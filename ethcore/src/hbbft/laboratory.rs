@@ -114,7 +114,7 @@ impl Accounts {
 				.map_err(|err| ErrorKind::EthstoreAccountInitNode(err))?;
 			let balance = client.state().balance(&address).unwrap();
 			let nonce = client.state().nonce(&address).unwrap();
-			debug!("######## Accounts::new: Account created with name: {}", name);
+			debug!("Accounts::new: Account created with name: {}", name);
 			Ok(Account { address, password, balance, nonce, retries: 0 })
 		}).collect::<Result<Vec<_>, Error>>()?;
 
@@ -258,7 +258,7 @@ impl Laboratory {
 			data,
 		};
 
-		debug!("######## LABORATORY: Transaction generated: {:?}", txn);
+		debug!("LABORATORY: Transaction generated: {:?}", txn);
 
 		(sender, self.sign_txn(sender, sender_pwd, chain_id, txn))
 	}
@@ -297,12 +297,12 @@ impl Laboratory {
 		let txns = match self.accounts.account_below(U256::from(TXN_AMOUNT_MAX)).cloned() {
 			// If an account is below the minimum and it's 'our turn' (sketchy):
 			Some(ref acct) => {
-				debug!("######## LABORATORY: An account is below the minimum balance.");
+				debug!("LABORATORY: An account is below the minimum balance.");
 				if U256::from(node_id) == (self.gen_counter as u64 % validator_count).into() {
 					let receiver_nonce = client.state().nonce(&receiver)
 						.unwrap_or_else(|_| panic!("Unable to determine nonce for account: {}", receiver));
 
-					info!("######## LABORATORY: Sending funds to {:?}", acct.address);
+					info!("LABORATORY: Sending funds to {:?}", acct.address);
 					// Add a contribution to initialize account:
 					let amt = (1000000000000000000 as u64).into();
 					self.accounts.account_mut(&acct.address).unwrap().balance += amt;
@@ -318,14 +318,14 @@ impl Laboratory {
 						}
 					)]
 				} else {
-					info!("########### LABORATORY: Not sending funds. \
+					debug!("LABORATORY: Not sending funds. \
 						(node_id: {}, gen_counter: {}, validator_count: {}, gen_counter % validator_count: {})",
 						node_id, self.gen_counter, validator_count, self.gen_counter as u64 % validator_count);
 					vec![]
 				}
 			},
 			_ => {
-				debug!("######## LABORATORY: All accounts above minimum balance.");
+				debug!("LABORATORY: All accounts above minimum balance.");
 				let mut txns = Vec::with_capacity(8);
 
 				for sender in self.accounts.next_stage() {
@@ -342,7 +342,7 @@ impl Laboratory {
 							receiver, client.signing_chain_id(), value_range, &mut rng);
 						txns.push(txn);
 					} else {
-						panic!("######## LABORATORY: Account with insufficient balance: {}", sender.address);
+						panic!("LABORATORY: Account with insufficient balance: {}", sender.address);
 					}
 				}
 				self.accounts.incr_stage();
@@ -355,7 +355,7 @@ impl Laboratory {
 					txn
 				}).collect::<Vec<_>>();
 
-				info!("######## LABORATORY: {} transactions generated", txns.len());
+				info!("LABORATORY: {} transactions generated", txns.len());
 
 				txns
 			}
@@ -374,7 +374,7 @@ impl Laboratory {
 			debug!("Unable to generate contribution: this node is not a validator");
 			return;
 		} else if !(self.last_block < block_counter || (self.last_block == 0 && block_counter == -1)) {
-			info!("####### LABORATORY: Block state has not progressed. Cancelling contribution push. \
+			debug!("LABORATORY: Block state has not progressed. Cancelling contribution push. \
 				(self.last_block: {}, block_counter: {})", self.last_block, block_counter);
 			return;
 		}
@@ -384,7 +384,7 @@ impl Laboratory {
 			None => return,
 		};
 
-		debug!("######## LABORATORY: Checking account data...");
+		debug!("LABORATORY: Checking account data...");
 
 		// Keep account data up to date:
 		for acct in self.accounts.accounts.iter_mut() {
@@ -396,7 +396,7 @@ impl Laboratory {
 			}
 
 			if acct.retries == 3 {
-				debug!("######## LABORATORY: Refreshing account info for: {}", acct.address);
+				debug!("LABORATORY: Refreshing account info for: {}", acct.address);
 				acct.balance = client.state().balance(&acct.address).unwrap();
 				acct.nonce = client.state().nonce(&acct.address).unwrap();
 				acct.retries = 0;
@@ -412,7 +412,7 @@ impl Laboratory {
 		}
 		self.test_password(&receiver_addr, &receiver_pwd);
 
-		debug!("######## LABORATORY: Generating transactions...");
+		debug!("LABORATORY: Generating transactions...");
 
 		let txns = self.gen_random_transactions(receiver_addr, receiver_pwd,
 			&mut RandRange::new(100, 1000), &client);

@@ -211,7 +211,7 @@ impl Engine<EthereumMachine> for Hbbft {
 	fn should_miner_prepare_blocks(&self) -> bool { false }
 
 	fn generate_seal(&self, block: &ExecutedBlock, _parent: &Header) -> Seal {
-		debug!(target: "engine", "####### Hbbft::generate_seal: Called for block: {:?}.", block);
+		debug!(target: "engine", "Hbbft::generate_seal: Called for block: {:?}.", block);
 		// match self.client.read().as_ref().and_then(|weak| weak.upgrade()) {
 		//	Some(client) => {
 		//		let best_block_header_num = (*client).as_full_client().unwrap().best_block_header().number();

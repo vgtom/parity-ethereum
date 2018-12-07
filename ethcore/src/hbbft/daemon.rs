@@ -181,10 +181,10 @@ impl ContributionPusher {
 
 		match self.epoch_rx.poll() {
 			Ok(Async::Ready(Some(epoch))) => {
-				debug!("####### CONTRIBUTION_PUSHER: epoch {} has begun.", epoch);
+				debug!("CONTRIBUTION_PUSHER: epoch {} has begun.", epoch);
 			}
 			Ok(Async::Ready(None)) => {
-				info!("####### CONTRIBUTION_PUSHER: Hydrabadger epoch tx has dropped.",);
+				info!("CONTRIBUTION_PUSHER: Hydrabadger epoch tx has dropped.",);
 				return;
 			}
 			Ok(Async::NotReady) => {
@@ -203,7 +203,7 @@ impl ContributionPusher {
 		let txns = if pending.len() <= contrib_size {
 			pending
 		} else {
-			debug!("###### Limiting proposal to {} transactions.", contrib_size);
+			debug!("Limiting proposal to {} transactions.", contrib_size);
 			rand::seq::sample_slice(&mut rng, &pending, contrib_size)
 		};
 		info!("ContributionPusher is proposing {} transactions to hydrabadger.", txns.len());
@@ -419,7 +419,7 @@ impl HbbftDaemon {
 			block_counter.clone(),
 			epoch_rx,
 		).into_loop());
-		info!("####### Hbbft contribution pusher has been started.");
+		info!("Hbbft contribution pusher has been started.");
 
 		let batch_handler = BatchHandler::new(
 			hydrabadger.batch_rx()
@@ -432,7 +432,7 @@ impl HbbftDaemon {
 
 		// Spawn batch handler:
 		executor.spawn(batch_handler.map_err(|err| panic!("Unhandled batch handler error: {:?}", err)));
-		info!("####### Hbbft batch handler has been started.");
+		info!("Hbbft batch handler has been started.");
 
 		// Set up an account to use for txn gen:
 		let accounts = Accounts::new(&*account_provider, &*client, &cfg.bind_address.to_string(),
