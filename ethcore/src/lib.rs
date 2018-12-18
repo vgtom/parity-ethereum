@@ -114,15 +114,11 @@ extern crate memory_cache;
 extern crate journaldb;
 #[cfg(any(test, feature = "json-tests", feature = "test-helpers"))]
 extern crate tempdir;
-<<<<<<< HEAD
 extern crate len_caching_lock;
-=======
-extern crate len_caching_mutex;
 extern crate futures;
 extern crate parity_runtime;
 extern crate tokio;
 extern crate hydrabadger;
->>>>>>> HBBFT: Add preliminary types and configuration files.
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android"))]
 extern crate hardware_wallet;
