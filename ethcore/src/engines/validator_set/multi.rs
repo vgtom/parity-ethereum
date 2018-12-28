@@ -20,12 +20,12 @@ use std::collections::BTreeMap;
 use std::sync::Weak;
 use ethereum_types::{H256, Address};
 use parking_lot::RwLock;
-use bytes::Bytes;
 use ids::BlockId;
 use header::{BlockNumber, Header};
 use client::EngineClient;
 use machine::{AuxiliaryData, Call, EthereumMachine};
 use super::{SystemCall, ValidatorSet};
+use ethkey::Signature;
 
 type BlockNumberLookup = Box<Fn(BlockId) -> Result<BlockNumber, String> + Send + Sync + 'static>;
 
@@ -55,7 +55,7 @@ impl Multi {
 
 	// get correct set by block number, along with block number at which
 	// this set was activated.
-	fn correct_set_by_number(&self, parent_block: BlockNumber) -> (BlockNumber, &ValidatorSet) {
+	fn correct_set_by_number(&self, parent_block: BlockNumber) -> (BlockNumber, &dyn ValidatorSet) {
 		let (block, set) = self.sets.iter()
 			.rev()
 			.find(|&(block, _)| *block <= parent_block + 1)
@@ -123,8 +123,8 @@ impl ValidatorSet for Multi {
 			.map_or_else(usize::max_value, |set| set.count_with_caller(bh, caller))
 	}
 
-	fn report_malicious(&self, validator: &Address, set_block: BlockNumber, block: BlockNumber, proof: Bytes) {
-		self.correct_set_by_number(set_block).1.report_malicious(validator, set_block, block, proof);
+	fn report_malicious(&self, validator: &Address, set_block: BlockNumber, block: BlockNumber, signer: &mut dyn FnMut(H256) -> Signature) {
+		self.correct_set_by_number(set_block).1.report_malicious(validator, set_block, block, signer);
 	}
 
 	fn report_benign(&self, validator: &Address, set_block: BlockNumber, block: BlockNumber) {
