@@ -15,17 +15,19 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 /// Validator set changing at fork blocks.
-
 use std::collections::BTreeMap;
 use std::sync::Weak;
-use ethereum_types::{H256, Address};
-use parking_lot::RwLock;
-use ids::BlockId;
-use header::{BlockNumber, Header};
+
 use client::EngineClient;
-use machine::{AuxiliaryData, Call, EthereumMachine};
-use super::{SystemCall, ValidatorSet};
+use error::Error;
+use ethereum_types::{Address, H256};
 use ethkey::Signature;
+use header::{BlockNumber, Header};
+use ids::BlockId;
+use machine::{AuxiliaryData, Call, EthereumMachine};
+use parking_lot::RwLock;
+
+use super::{SystemCall, ValidatorSet};
 
 type BlockNumberLookup = Box<Fn(BlockId) -> Result<BlockNumber, String> + Send + Sync + 'static>;
 
@@ -36,7 +38,10 @@ pub struct Multi {
 
 impl Multi {
 	pub fn new(set_map: BTreeMap<BlockNumber, Box<ValidatorSet>>) -> Self {
-		assert!(set_map.get(&0u64).is_some(), "ValidatorSet has to be specified from block 0.");
+		assert!(
+			set_map.get(&0u64).is_some(),
+			"ValidatorSet has to be specified from block 0."
+		);
 		Multi {
 			sets: set_map,
 			block_number: RwLock::new(Box::new(move |_| Err("No client!".into()))),
@@ -44,12 +49,14 @@ impl Multi {
 	}
 
 	fn correct_set(&self, id: BlockId) -> Option<&ValidatorSet> {
-		match self.block_number.read()(id).map(|parent_block| self.correct_set_by_number(parent_block)) {
+		match self.block_number.read()(id)
+			.map(|parent_block| self.correct_set_by_number(parent_block))
+		{
 			Ok((_, set)) => Some(set),
 			Err(e) => {
 				debug!(target: "engine", "ValidatorSet could not be recovered: {}", e);
 				None
-			},
+			}
 		}
 	}
 
@@ -70,11 +77,19 @@ impl Multi {
 
 impl ValidatorSet for Multi {
 	fn default_caller(&self, block_id: BlockId) -> Box<Call> {
-		self.correct_set(block_id).map(|set| set.default_caller(block_id))
-			.unwrap_or(Box::new(|_, _| Err("No validator set for given ID.".into())))
+		self.correct_set(block_id)
+			.map(|set| set.default_caller(block_id))
+			.unwrap_or(Box::new(
+				|_, _| Err("No validator set for given ID.".into()),
+			))
 	}
 
-	fn on_epoch_begin(&self, _first: bool, header: &Header, call: &mut SystemCall) -> Result<(), ::error::Error> {
+	fn on_epoch_begin(
+		&self,
+		_first: bool,
+		header: &Header,
+		call: &mut SystemCall,
+	) -> Result<(), Error> {
 		let (set_block, set) = self.correct_set_by_number(header.number());
 		let first = set_block == header.number();
 
@@ -82,7 +97,9 @@ impl ValidatorSet for Multi {
 	}
 
 	fn genesis_epoch_data(&self, header: &Header, call: &Call) -> Result<Vec<u8>, String> {
-		self.correct_set_by_number(0).1.genesis_epoch_data(header, call)
+		self.correct_set_by_number(0)
+			.1
+			.genesis_epoch_data(header, call)
 	}
 
 	fn is_epoch_end(&self, _first: bool, chain_head: &Header) -> Option<Vec<u8>> {
@@ -92,16 +109,25 @@ impl ValidatorSet for Multi {
 		set.is_epoch_end(first, chain_head)
 	}
 
-	fn signals_epoch_end(&self, _first: bool, header: &Header, aux: AuxiliaryData)
-		-> ::engines::EpochChange<EthereumMachine>
-	{
+	fn signals_epoch_end(
+		&self,
+		_first: bool,
+		header: &Header,
+		aux: AuxiliaryData,
+	) -> ::engines::EpochChange<EthereumMachine> {
 		let (set_block, set) = self.correct_set_by_number(header.number());
 		let first = set_block == header.number();
 
 		set.signals_epoch_end(first, header, aux)
 	}
 
-	fn epoch_set(&self, _first: bool, machine: &EthereumMachine, number: BlockNumber, proof: &[u8]) -> Result<(super::SimpleList, Option<H256>), ::error::Error> {
+	fn epoch_set(
+		&self,
+		_first: bool,
+		machine: &EthereumMachine,
+		number: BlockNumber,
+		proof: &[u8],
+	) -> Result<(super::SimpleList, Option<H256>), Error> {
 		let (set_block, set) = self.correct_set_by_number(number);
 		let first = set_block == number;
 
@@ -115,7 +141,9 @@ impl ValidatorSet for Multi {
 
 	fn get_with_caller(&self, bh: &H256, nonce: usize, caller: &Call) -> Address {
 		self.correct_set(BlockId::Hash(*bh))
-			.map_or_else(Default::default, |set| set.get_with_caller(bh, nonce, caller))
+			.map_or_else(Default::default, |set| {
+				set.get_with_caller(bh, nonce, caller)
+			})
 	}
 
 	fn count_with_caller(&self, bh: &H256, caller: &Call) -> usize {
@@ -123,41 +151,55 @@ impl ValidatorSet for Multi {
 			.map_or_else(usize::max_value, |set| set.count_with_caller(bh, caller))
 	}
 
-	fn report_malicious(&self, validator: &Address, set_block: BlockNumber, block: BlockNumber, signer: &mut dyn FnMut(H256) -> Signature) {
-		self.correct_set_by_number(set_block).1.report_malicious(validator, set_block, block, signer);
+	fn report_malicious(
+		&self,
+		validator: &Address,
+		set_block: BlockNumber,
+		block: BlockNumber,
+		signer: &dyn Fn(H256) -> Result<Signature, Error>,
+	) -> Result<(), Error> {
+		self.correct_set_by_number(set_block)
+			.1
+			.report_malicious(validator, set_block, block, signer)
 	}
 
 	fn report_benign(&self, validator: &Address, set_block: BlockNumber, block: BlockNumber) {
-		self.correct_set_by_number(set_block).1.report_benign(validator, set_block, block);
+		self.correct_set_by_number(set_block)
+			.1
+			.report_benign(validator, set_block, block);
 	}
 
 	fn register_client(&self, client: Weak<EngineClient>) {
 		for set in self.sets.values() {
 			set.register_client(client.clone());
 		}
-		*self.block_number.write() = Box::new(move |id| client
-			.upgrade()
-			.ok_or_else(|| "No client!".into())
-			.and_then(|c| c.block_number(id).ok_or("Unknown block".into())));
+		*self.block_number.write() = Box::new(move |id| {
+			client
+				.upgrade()
+				.ok_or_else(|| "No client!".into())
+				.and_then(|c| c.block_number(id).ok_or("Unknown block".into()))
+		});
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use std::sync::Arc;
-	use std::collections::BTreeMap;
-	use hash::keccak;
 	use account_provider::AccountProvider;
-	use client::{BlockChainClient, ChainInfo, BlockInfo, ImportBlock};
-	use engines::EpochChange;
+	use client::{BlockChainClient, BlockInfo, ChainInfo, ImportBlock};
 	use engines::validator_set::ValidatorSet;
+	use engines::EpochChange;
+	use ethereum_types::Address;
 	use ethkey::Secret;
+	use hash::keccak;
 	use header::Header;
 	use miner::MinerService;
 	use spec::Spec;
-	use test_helpers::{generate_dummy_client_with_spec_and_accounts, generate_dummy_client_with_spec_and_data};
+	use std::collections::BTreeMap;
+	use std::sync::Arc;
+	use test_helpers::{
+		generate_dummy_client_with_spec_and_accounts, generate_dummy_client_with_spec_and_data,
+	};
 	use types::ids::BlockId;
-	use ethereum_types::Address;
 	use verification::queue::kind::blocks::Unverified;
 
 	use super::Multi;
@@ -168,15 +210,22 @@ mod tests {
 		let s0: Secret = keccak("0").into();
 		let v0 = tap.insert_account(s0.clone(), &"".into()).unwrap();
 		let v1 = tap.insert_account(keccak("1").into(), &"".into()).unwrap();
-		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_validator_multi, Some(tap));
-		client.engine().register_client(Arc::downgrade(&client) as _);
+		let client =
+			generate_dummy_client_with_spec_and_accounts(Spec::new_validator_multi, Some(tap));
+		client
+			.engine()
+			.register_client(Arc::downgrade(&client) as _);
 
 		// Make sure txs go through.
-		client.miner().set_gas_range_target((1_000_000.into(), 1_000_000.into()));
+		client
+			.miner()
+			.set_gas_range_target((1_000_000.into(), 1_000_000.into()));
 
 		// Wrong signer for the first block.
 		client.miner().set_author(v1, Some("".into())).unwrap();
-		client.transact_contract(Default::default(), Default::default()).unwrap();
+		client
+			.transact_contract(Default::default(), Default::default())
+			.unwrap();
 		::client::EngineClient::update_sealing(&*client);
 		assert_eq!(client.chain_info().best_block_number, 0);
 		// Right signer for the first block.
@@ -184,22 +233,34 @@ mod tests {
 		::client::EngineClient::update_sealing(&*client);
 		assert_eq!(client.chain_info().best_block_number, 1);
 		// This time v0 is wrong.
-		client.transact_contract(Default::default(), Default::default()).unwrap();
+		client
+			.transact_contract(Default::default(), Default::default())
+			.unwrap();
 		::client::EngineClient::update_sealing(&*client);
 		assert_eq!(client.chain_info().best_block_number, 1);
 		client.miner().set_author(v1, Some("".into())).unwrap();
 		::client::EngineClient::update_sealing(&*client);
 		assert_eq!(client.chain_info().best_block_number, 2);
 		// v1 is still good.
-		client.transact_contract(Default::default(), Default::default()).unwrap();
+		client
+			.transact_contract(Default::default(), Default::default())
+			.unwrap();
 		::client::EngineClient::update_sealing(&*client);
 		assert_eq!(client.chain_info().best_block_number, 3);
 
 		// Check syncing.
-		let sync_client = generate_dummy_client_with_spec_and_data(Spec::new_validator_multi, 0, 0, &[]);
-		sync_client.engine().register_client(Arc::downgrade(&sync_client) as _);
+		let sync_client =
+			generate_dummy_client_with_spec_and_data(Spec::new_validator_multi, 0, 0, &[]);
+		sync_client
+			.engine()
+			.register_client(Arc::downgrade(&sync_client) as _);
 		for i in 1..4 {
-			sync_client.import_block(Unverified::from_rlp(client.block(BlockId::Number(i)).unwrap().into_inner()).unwrap()).unwrap();
+			sync_client
+				.import_block(
+					Unverified::from_rlp(client.block(BlockId::Number(i)).unwrap().into_inner())
+						.unwrap(),
+				)
+				.unwrap();
 		}
 		sync_client.flush_queue();
 		assert_eq!(sync_client.chain_info().best_block_number, 3);
@@ -226,7 +287,7 @@ mod tests {
 		header.set_number(499);
 
 		match multi.signals_epoch_end(false, &header, Default::default()) {
-			EpochChange::No => {},
+			EpochChange::No => {}
 			_ => panic!("Expected no epoch signal change."),
 		}
 		assert!(multi.is_epoch_end(false, &header).is_none());
@@ -234,7 +295,7 @@ mod tests {
 		header.set_number(500);
 
 		match multi.signals_epoch_end(false, &header, Default::default()) {
-			EpochChange::No => {},
+			EpochChange::No => {}
 			_ => panic!("Expected no epoch signal change."),
 		}
 		assert!(multi.is_epoch_end(false, &header).is_some());

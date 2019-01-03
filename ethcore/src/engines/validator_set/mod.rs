@@ -14,41 +14,50 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
+mod contract;
+mod multi;
+mod safe_contract;
+mod simple_list;
 /// Validator lists.
 
 #[cfg(test)]
 mod test;
-mod simple_list;
-mod safe_contract;
-mod contract;
-mod multi;
 
 use std::sync::Weak;
-use ids::BlockId;
-use ethereum_types::{H256, Address};
-use ethjson::spec::ValidatorSet as ValidatorSpec;
+
 use client::EngineClient;
-use header::{Header, BlockNumber};
+use error::Error;
+use ethereum_types::{Address, H256};
+use ethjson::spec::ValidatorSet as ValidatorSpec;
+use ethkey::Signature;
+use header::{BlockNumber, Header};
+use ids::BlockId;
 use machine::{AuxiliaryData, Call, EthereumMachine};
 
+use self::contract::ValidatorContract;
+use self::multi::Multi;
+use self::safe_contract::ValidatorSafeContract;
+pub use self::simple_list::SimpleList;
 #[cfg(test)]
 pub use self::test::TestSet;
-pub use self::simple_list::SimpleList;
-use self::contract::ValidatorContract;
-use self::safe_contract::ValidatorSafeContract;
-use self::multi::Multi;
 use super::SystemCall;
-use ethkey::Signature;
 
 /// Creates a validator set from spec.
 pub fn new_validator_set(spec: ValidatorSpec) -> Box<ValidatorSet> {
 	match spec {
-		ValidatorSpec::List(list) => Box::new(SimpleList::new(list.into_iter().map(Into::into).collect())),
-		ValidatorSpec::SafeContract(address) => Box::new(ValidatorSafeContract::new(address.into())),
+		ValidatorSpec::List(list) => {
+			Box::new(SimpleList::new(list.into_iter().map(Into::into).collect()))
+		}
+		ValidatorSpec::SafeContract(address) => {
+			Box::new(ValidatorSafeContract::new(address.into()))
+		}
 		ValidatorSpec::Contract(address) => Box::new(ValidatorContract::new(address.into())),
-		ValidatorSpec::Multi(sequence) => Box::new(
-			Multi::new(sequence.into_iter().map(|(block, set)| (block.into(), new_validator_set(set))).collect())
-		),
+		ValidatorSpec::Multi(sequence) => Box::new(Multi::new(
+			sequence
+				.into_iter()
+				.map(|(block, set)| (block.into(), new_validator_set(set)))
+				.collect(),
+		)),
 	}
 }
 
@@ -85,12 +94,19 @@ pub trait ValidatorSet: Send + Sync + 'static {
 	/// The caller provided here may not generate proofs.
 	///
 	/// `first` is true if this is the first block in the set.
-	fn on_epoch_begin(&self, _first: bool, _header: &Header, _call: &mut SystemCall) -> Result<(), ::error::Error> {
+	fn on_epoch_begin(
+		&self,
+		_first: bool,
+		_header: &Header,
+		_call: &mut SystemCall,
+	) -> Result<(), Error> {
 		Ok(())
 	}
 
 	/// Extract genesis epoch data from the genesis state and header.
-	fn genesis_epoch_data(&self, _header: &Header, _call: &Call) -> Result<Vec<u8>, String> { Ok(Vec::new()) }
+	fn genesis_epoch_data(&self, _header: &Header, _call: &Call) -> Result<Vec<u8>, String> {
+		Ok(Vec::new())
+	}
 
 	/// Whether this block is the last one in its epoch.
 	///
@@ -120,12 +136,22 @@ pub trait ValidatorSet: Send + Sync + 'static {
 	///
 	/// Returns the set, along with a flag indicating whether finality of a specific
 	/// hash should be proven.
-	fn epoch_set(&self, first: bool, machine: &EthereumMachine, number: BlockNumber, proof: &[u8])
-		-> Result<(SimpleList, Option<H256>), ::error::Error>;
+	fn epoch_set(
+		&self,
+		first: bool,
+		machine: &EthereumMachine,
+		number: BlockNumber,
+		proof: &[u8],
+	) -> Result<(SimpleList, Option<H256>), Error>;
 
 	/// Checks if a given address is a validator, with the given function
 	/// for executing synchronous calls to contracts.
-	fn contains_with_caller(&self, parent_block_hash: &H256, address: &Address, caller: &Call) -> bool;
+	fn contains_with_caller(
+		&self,
+		parent_block_hash: &H256,
+		address: &Address,
+		caller: &Call,
+	) -> bool;
 
 	/// Draws an validator nonce modulo number of validators.
 	fn get_with_caller(&self, parent_block_hash: &H256, nonce: usize, caller: &Call) -> Address;
@@ -134,7 +160,15 @@ pub trait ValidatorSet: Send + Sync + 'static {
 	fn count_with_caller(&self, parent_block_hash: &H256, caller: &Call) -> usize;
 
 	/// Notifies about malicious behaviour.
-	fn report_malicious(&self, _validator: &Address, _set_block: BlockNumber, _block: BlockNumber, _signer: &mut dyn FnMut(H256) -> Signature) {}
+	fn report_malicious(
+		&self,
+		_validator: &Address,
+		_set_block: BlockNumber,
+		_block: BlockNumber,
+		_signer: &dyn Fn(H256) -> Result<Signature, Error>,
+	) -> Result<(), Error> {
+		Ok(())
+	}
 	/// Notifies about benign misbehaviour.
 	fn report_benign(&self, _validator: &Address, _set_block: BlockNumber, _block: BlockNumber) {}
 	/// Allows blockchain state access.
