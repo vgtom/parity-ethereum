@@ -22,9 +22,6 @@ use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use heapsize::HeapSizeOf;
 use ethereum_types::{H256, Address};
 use bytes::Bytes;
-use ethkey::Signature;
-
-use error::Error;
 use machine::{AuxiliaryData, Call, EthereumMachine};
 use header::{Header, BlockNumber};
 use super::{ValidatorSet, SimpleList};
