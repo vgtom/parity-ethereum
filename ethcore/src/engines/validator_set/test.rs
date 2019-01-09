@@ -21,6 +21,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use heapsize::HeapSizeOf;
 use ethereum_types::{H256, Address};
+use bytes::Bytes;
 
 use machine::{AuxiliaryData, Call, EthereumMachine};
 use header::{Header, BlockNumber};
@@ -84,7 +85,7 @@ impl ValidatorSet for TestSet {
 		1
 	}
 
-	fn report_malicious(&self, _validator: &Address, _set_block: BlockNumber, block: BlockNumber, signer: &mut dyn FnMut(H256) -> Signature) {
+	fn report_malicious(&self, _validator: &Address, _set_block: BlockNumber, block: BlockNumber, _proof: Bytes) {
 		self.last_malicious.store(block as usize, AtomicOrdering::SeqCst)
 	}
 

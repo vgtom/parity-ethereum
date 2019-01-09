@@ -1252,7 +1252,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 			|| (header.number() >= self.validate_step_transition && step <= parent_step) {
 			trace!(target: "engine", "Multiple blocks proposed for step {}.", parent_step);
 
-			self.validators.report_malicious(header.author(), set_number, header.number(), &|hash| self.sign(hash))?;
+			self.validators.report_malicious(header.author(), set_number, header.number(), Default::default());
 			Err(EngineError::DoubleVote(*header.author()))?;
 		}
 
@@ -1532,6 +1532,7 @@ mod tests {
 	use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 	use hash::keccak;
 	use ethereum_types::{Address, H520, H256, U256};
+	use ethjson::spec::authority_round::ConsensusKind;
 	use ethkey::Signature;
 	use header::Header;
 	use rlp::encode;
@@ -1566,6 +1567,7 @@ mod tests {
 			block_reward_contract_transition: 0,
 			block_reward_contract: Default::default(),
 			strict_empty_steps_transition: 0,
+			consensus_kind: ConsensusKind::Poa,
 		};
 
 		// mutate aura params
