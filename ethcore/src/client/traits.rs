@@ -376,7 +376,15 @@ pub trait BlockChainClient : Sync + Send + AccountData + BlockChain + CallContra
 	fn pruning_info(&self) -> PruningInfo;
 
 	/// Schedule state-altering transaction to be executed on the next pending block.
-	fn transact_contract(&self, address: Address, data: Bytes) -> Result<(), transaction::Error>;
+	fn transact_contract(&self, address: Address, data: Bytes) -> Result<(), transaction::Error> {
+		self.transact(Action::Call(address), data, None, None)
+	}
+
+	/// Schedule state-altering transaction to be executed on the next pending block with the given gas parameters.
+	///
+	/// If they are `None`, sensible values are selected automatically.
+	fn transact(&self, action: Action, data: Bytes, gas: Option<U256>, gas_price: Option<U256>)
+		-> Result<(), transaction::Error>;
 
 	/// Get the address of the registry itself.
 	fn registrar_address(&self) -> Option<Address>;
