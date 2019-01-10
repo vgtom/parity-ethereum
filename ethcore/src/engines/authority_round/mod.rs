@@ -26,7 +26,7 @@ use std::time::{UNIX_EPOCH, SystemTime, Duration};
 
 use account_provider::AccountProvider;
 use block::*;
-use client::EngineClient;
+use client::{BlockId, EngineClient};
 use engines::{Engine, Seal, EngineError, ConstructedVerifier};
 use engines::block_reward;
 use engines::block_reward::{BlockRewardContract, RewardKind};
@@ -48,6 +48,8 @@ use types::ancestry_action::AncestryAction;
 use unexpected::{Mismatch, OutOfBounds};
 
 mod finality;
+mod randomness;
+mod util;
 
 /// `AuthorityRound` params.
 pub struct AuthorityRoundParams {
@@ -85,6 +87,8 @@ pub struct AuthorityRoundParams {
 	pub strict_empty_steps_transition: u64,
 	/// Sets whether Aura will use Proof of Authority (PoA) or Proof of Stake (PoS) consensus.
 	pub consensus_kind: ConsensusKind,
+	/// If set, enables random number contract integration.
+	pub randomness_contract_address: Option<Address>,
 }
 
 const U16_MAX: usize = ::std::u16::MAX as usize;
@@ -116,6 +120,7 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 			maximum_empty_steps: p.maximum_empty_steps.map_or(0, Into::into),
 			strict_empty_steps_transition: p.strict_empty_steps_transition.map_or(0, Into::into),
 			consensus_kind: p.consensus_kind.unwrap_or(ConsensusKind::Poa),
+			randomness_contract_address: p.randomness_contract_address.map(Into::into),
 		}
 	}
 }
@@ -431,6 +436,11 @@ pub struct AuthorityRound {
 	maximum_empty_steps: usize,
 	consensus_kind: ConsensusKind,
 	machine: EthereumMachine,
+	/// The stored secret contribution to randomness.
+	// TODO: Only used in PoS. Maybe make part of `ConsensusKind`? Or tie together with `randomness_contract_address`?
+	rand_secret: RwLock<Option<randomness::Secret>>,
+	/// If set, enables random number contract integration.
+	randomness_contract_address: Option<Address>,
 }
 
 // header-chain validator.
@@ -685,6 +695,8 @@ impl AuthorityRound {
 				strict_empty_steps_transition: our_params.strict_empty_steps_transition,
 				consensus_kind: our_params.consensus_kind,
 				machine: machine,
+				rand_secret: Default::default(),
+				randomness_contract_address: our_params.randomness_contract_address,
 			});
 
 		// Do not initialize timeouts for tests.
@@ -1138,6 +1150,29 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		epoch_begin: bool,
 		_ancestry: &mut Iterator<Item=ExtendedHeader>,
 	) -> Result<(), Error> {
+		// Random number generation
+		// This will add local service transactions to the queue. Since `on_new_block` is called before the transactions
+		// are selected from the queue and local transactions are prioritized, they should end up in this block.
+		// TODO: Verify this!
+		if let (Some(contract_addr), Some(our_addr)) = (self.randomness_contract_address, self.signer.read().address()) {
+			let client = match self.client.read().as_ref().and_then(|weak| weak.upgrade()) {
+				Some(client) => client,
+				None => {
+					debug!(target: "engine", "Unable to close block: missing client ref.");
+					return Err(EngineError::RequiresClient.into())
+				},
+			};
+			let block_id = BlockId::Number(block.header.number());
+			let mut contract = util::BoundContract::bind(&*client, block_id, contract_addr);
+			// TODO: How should these errors be handled?
+			let phase = randomness::RandomnessPhase::load(&contract, our_addr)
+				.map_err(|err| EngineError::FailedSystemCall(format!("Randomness error: {:?}", err)))?;
+			let secret = *self.rand_secret.read();
+			let mut rng = ::rand::OsRng::new()?;
+			*self.rand_secret.write() = phase.advance(&contract, secret, &mut rng)
+				.map_err(|err| EngineError::FailedSystemCall(format!("Randomness error: {:?}", err)))?;
+		}
+
 		// with immediate transitions, we don't use the epoch mechanism anyway.
 		// the genesis is always considered an epoch, but we ignore it intentionally.
 		if self.immediate_transitions || !epoch_begin { return Ok(()) }
@@ -1532,7 +1567,6 @@ mod tests {
 	use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 	use hash::keccak;
 	use ethereum_types::{Address, H520, H256, U256};
-	use ethjson::spec::authority_round::ConsensusKind;
 	use ethkey::Signature;
 	use header::Header;
 	use rlp::encode;
@@ -1547,7 +1581,7 @@ mod tests {
 	use engines::{Seal, Engine, EngineError, EthEngine};
 	use engines::validator_set::{TestSet, SimpleList};
 	use error::{Error, ErrorKind};
-	use super::{AuthorityRoundParams, AuthorityRound, EmptyStep, SealedEmptyStep, calculate_score};
+	use super::{AuthorityRoundParams, AuthorityRound, EmptyStep, SealedEmptyStep, calculate_score, ConsensusKind};
 
 	fn aura<F>(f: F) -> Arc<AuthorityRound> where
 		F: FnOnce(&mut AuthorityRoundParams),
@@ -1568,6 +1602,7 @@ mod tests {
 			block_reward_contract: Default::default(),
 			strict_empty_steps_transition: 0,
 			consensus_kind: ConsensusKind::Poa,
+			randomness_contract_address: None,
 		};
 
 		// mutate aura params
@@ -1793,16 +1828,16 @@ mod tests {
 		assert_eq!(aura.maximum_uncle_count(100), 0);
 	}
 
-    #[test]
-    #[should_panic(expected="counter is too high")]
-    fn test_counter_increment_too_high() {
-        use super::Step;
-        let step = Step {
-            calibrate: false,
-            inner: AtomicUsize::new(::std::usize::MAX),
-            duration: 1,
-        };
-        step.increment();
+	#[test]
+	#[should_panic(expected="counter is too high")]
+	fn test_counter_increment_too_high() {
+		use super::Step;
+		let step = Step {
+			calibrate: false,
+			inner: AtomicUsize::new(::std::usize::MAX),
+			duration: 1,
+		};
+		step.increment();
 	}
 
 	#[test]
