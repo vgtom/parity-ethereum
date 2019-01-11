@@ -26,6 +26,7 @@ use parking_lot::RwLock;
 use client::EngineClient;
 use header::{Header, BlockNumber};
 use machine::{AuxiliaryData, Call, EthereumMachine};
+use transaction::Action;
 
 use super::{ValidatorSet, SimpleList, SystemCall};
 use super::safe_contract::ValidatorSafeContract;
@@ -57,7 +58,7 @@ impl ValidatorContract {
 
 		match client.as_full_client() {
 			Some(c) => {
-				c.transact_contract(self.contract_address, data)
+				c.transact(Action::Call(self.contract_address), data, None, Some(0.into()))
 					.map_err(|e| format!("Transaction import error: {}", e))?;
 				Ok(())
 			},
