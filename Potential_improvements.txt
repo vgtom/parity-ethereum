@@ -1,0 +1,8 @@
+- External security audit
+- See if some contracts can be optimized
+- Improve Solidity type-safety
+- Possibility: Cloud service to protect validators from DoS attacks
+- Possibility: Create a formal specification
+- Possibility: Apply static analysis to the smart contracts
+- Handle on-chain randomness
+- On-chain secure storage that is compatible with hardware wallets
