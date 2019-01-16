@@ -110,13 +110,22 @@ impl RandomnessPhase {
 		// Determine the current round and which phase we are in.
 		let round = contract
 			.call_const(aura_random::functions::current_collect_round::call())
-			.map_err(PhaseError::LoadFailed)?;
+			.map_err(|x| {
+				error!("LOADING FAILED: {:?}", x);
+				PhaseError::LoadFailed(x)
+			})?;
 		let is_reveal_phase = contract
 			.call_const(aura_random::functions::is_reveal_phase::call())
-			.map_err(PhaseError::LoadFailed)?;
+			.map_err(|x| {
+				error!("LOADING FAILED: {:?}", x);
+				PhaseError::LoadFailed(x)
+			})?;
 		let is_commit_phase = contract
 			.call_const(aura_random::functions::is_commit_phase::call())
-			.map_err(PhaseError::LoadFailed)?;
+			.map_err(|x| {
+				error!("LOADING FAILED: {:?}", x);
+				PhaseError::LoadFailed(x)
+			})?;
 
 		// Ensure we are not committing or revealing twice.
 		let committed = contract
@@ -124,13 +133,19 @@ impl RandomnessPhase {
 				round,
 				our_address,
 			))
-			.map_err(PhaseError::LoadFailed)?;
+			.map_err(|x| {
+				error!("LOADING FAILED: {:?}", x);
+				PhaseError::LoadFailed(x)
+			})?;
 		let revealed: bool = contract
 			.call_const(aura_random::functions::sent_reveal::call(
 				round,
 				our_address,
 			))
-			.map_err(PhaseError::LoadFailed)?;
+			.map_err(|x| {
+				error!("LOADING FAILED: {:?}", x);
+				PhaseError::LoadFailed(x)
+			})?;
 
 		// With all the information known, we can determine the actual state we are in.
 		if is_reveal_phase && is_commit_phase {
@@ -202,7 +217,10 @@ impl RandomnessPhase {
 				let secret_hash: Hash = keccak(secret.as_ref());
 				let committed_hash: Hash = contract
 					.call_const(aura_random::functions::get_commit::call(round, our_address))
-					.map_err(PhaseError::LoadFailed)?;
+					.map_err(|x| {
+						error!("LOADING FAILED: {:?}", x);
+						PhaseError::LoadFailed(x)
+					})?;
 
 				if secret_hash != committed_hash {
 					return Err(PhaseError::StaleSecret);
