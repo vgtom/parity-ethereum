@@ -65,7 +65,7 @@ impl<'a> BoundContract<'a> {
 		D: ethabi::FunctionOutputDecoder,
 	{
 		let (data, output_decoder) = call;
-
+		debug!("Making call to contract: self = {:?}, data = {:?}", self, data);
 		let call_return = self
 			.client
 			.as_full_client()

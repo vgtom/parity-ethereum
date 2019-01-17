@@ -174,9 +174,17 @@ fn prove_initial(contract_address: Address, header: &Header, caller: &Call) -> R
 	let epoch_proof = RefCell::new(None);
 	let validators = {
 		let (data, decoder) = validator_set::functions::get_validators::call();
-		let (value, proof) = caller(contract_address, data)?;
+		debug!("Calling contract at address {:?} with data {:?}", contract_address, data);
+		let (value, proof) = caller(contract_address, data).map_err(|e| {
+			error!("Failed to get caller for contract address: {:?}", e);
+			e
+		})?;
+        debug!("Value: {:?}, Proof: {:?}", value, proof);
 		*epoch_proof.borrow_mut() = Some(encode_first_proof(header, &proof));
-		decoder.decode(&value).map_err(|e| e.to_string())?
+		decoder.decode(&value).map_err(|e| e.to_string()).map_err(|e| {
+			error!("Failed to decode validator set: {:?}", e);
+			e
+		})?
 	};
 
 	let proof = epoch_proof.into_inner().expect("epoch_proof always set after call; qed");
@@ -310,7 +318,10 @@ impl ValidatorSet for ValidatorSafeContract {
 	}
 
 	fn genesis_epoch_data(&self, header: &Header, call: &Call) -> Result<Vec<u8>, String> {
-		prove_initial(self.contract_address, header, call)
+		prove_initial(self.contract_address, header, call).map_err(|e|{
+			error!("Failed to initialize genesis epoch: {:?}", e);
+			panic!("Failed to initialize genesis epoch: {:?}", e)
+		})
 	}
 
 	fn is_epoch_end(&self, _first: bool, _chain_head: &Header) -> Option<Vec<u8>> {
