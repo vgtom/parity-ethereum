@@ -26,7 +26,7 @@ use std::time::{UNIX_EPOCH, SystemTime, Duration};
 
 use account_provider::AccountProvider;
 use block::*;
-use client::{BlockId, EngineClient};
+use client::EngineClient;
 use engines::{Engine, Seal, EngineError, ConstructedVerifier};
 use engines::block_reward;
 use engines::block_reward::{BlockRewardContract, RewardKind};
@@ -1144,29 +1144,29 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		// Random number generation
 		// This will add local service transactions to the queue. Since `on_new_block` is called before the transactions
 		// are selected from the queue and local transactions are prioritized, they should end up in this block.
-		// TODO: Verify this!
-		let client = match self.client.read().as_ref().and_then(|weak| weak.upgrade()) {
-			Some(client) => client,
-			None => {
-				debug!(target: "engine", "Unable to close block: missing client ref.");
-				return Err(EngineError::RequiresClient.into())
-			},
-		};
 		if let (Some(contract_addr), Some(our_addr)) = (self.randomness_contract_address, self.signer.read().address()) {
-			let block_id = BlockId::Latest;
-			let mut contract = util::BoundContract::bind(&*client, block_id, contract_addr);
+			let mut contract = util::BoundContract::bind(&self.machine, &self.signer, block, contract_addr);
 			let accounts = self.signer.read().account_provider().clone();
 			// TODO: How should these errors be handled?
 			let phase = randomness::RandomnessPhase::load(&contract, our_addr)
 				.map_err(|err| EngineError::FailedSystemCall(format!("Randomness error: {:?}", err)))?;
 			let mut rng = ::rand::OsRng::new()?;
-			phase.advance(&contract, &mut rng, &*accounts)
+			phase.advance(&mut contract, &mut rng, &*accounts)
 				.map_err(|err| EngineError::FailedSystemCall(format!("Randomness error: {:?}", err)))?;
 		}
 
 		// genesis is never a new block, but might as well check.
 		let header = block.header().clone();
 		let first = header.number() == 0;
+
+		if let Some(addr) = self.validators.contract_address(header.number()) {
+			let mut contract = util::BoundContract::bind(&self.machine, &self.signer, block, addr);
+			self.validators.on_new_block(&mut contract, first, &header)?;
+		}
+
+		// with immediate transitions, we don't use the epoch mechanism anyway.
+		// the genesis is always considered an epoch, but we ignore it intentionally.
+		if self.immediate_transitions || !epoch_begin { return Ok(()) }
 
 		let mut call = |to, data| {
 			let result = self.machine.execute_as_system(
@@ -1178,12 +1178,6 @@ impl Engine<EthereumMachine> for AuthorityRound {
 
 			result.map_err(|e| format!("{}", e))
 		};
-
-		self.validators.on_new_block(first, &header, &mut call)?;
-
-		// with immediate transitions, we don't use the epoch mechanism anyway.
-		// the genesis is always considered an epoch, but we ignore it intentionally.
-		if self.immediate_transitions || !epoch_begin { return Ok(()) }
 
 		self.validators.on_epoch_begin(first, &header, &mut call)
 	}
