@@ -1154,13 +1154,13 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		};
 		if let (Some(contract_addr), Some(our_addr)) = (self.randomness_contract_address, self.signer.read().address()) {
 			let block_id = BlockId::Latest;
-			let mut contract = util::BoundContract::bind(&*client, block_id, contract_addr);
+			let mut contract = util::BoundContract::bind(&*client, &self.machine, &self.signer, block, contract_addr);
 			let accounts = self.signer.read().account_provider().clone();
 			// TODO: How should these errors be handled?
 			let phase = randomness::RandomnessPhase::load(&contract, our_addr)
 				.map_err(|err| EngineError::FailedSystemCall(format!("Randomness error: {:?}", err)))?;
 			let mut rng = ::rand::OsRng::new()?;
-			phase.advance(&contract, &mut rng, &*accounts)
+			phase.advance(&mut contract, &mut rng, &*accounts)
 				.map_err(|err| EngineError::FailedSystemCall(format!("Randomness error: {:?}", err)))?;
 		}
 
