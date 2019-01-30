@@ -725,6 +725,11 @@ impl AuthorityRound {
 		})
 	}
 
+	fn is_block_proposer(&self, block: &ExecutedBlock) -> bool {
+		let header = block.header();
+		is_step_proposer(&*self.validators, header.parent_hash(), self.step.inner.load(), self.signer.read().address())
+	}
+
 	fn empty_steps(&self, from_step: u64, to_step: u64, parent_hash: H256) -> Vec<EmptyStep> {
 		let from = EmptyStep {
 			step: from_step + 1,
@@ -1179,7 +1184,9 @@ impl Engine<EthereumMachine> for AuthorityRound {
 			result.map_err(|e| format!("{}", e))
 		};
 
-		self.validators.on_new_block(first, &header, &mut call)?;
+		if self.is_step_proposer(&block) {
+			self.validators.on_new_block(first, &header, &mut call)?;
+		}
 
 		// with immediate transitions, we don't use the epoch mechanism anyway.
 		// the genesis is always considered an epoch, but we ignore it intentionally.

@@ -291,7 +291,7 @@ impl ValidatorSet for ValidatorSafeContract {
 	}
 
 	fn on_new_block(&self, _first: bool, _header: &Header, caller: &mut SystemCall) -> Result<(), ::error::Error> {
-		error!("New block issued ― calling emitInitiateChange()");
+		debug!(target: "engine", "New block issued ― calling emitInitiateChange()");
 		let (data, decoder) = validator_set::functions::emit_initiate_change_callable::call();
 		if !caller(self.contract_address, data)
 			.and_then(|x| decoder.decode(&x)

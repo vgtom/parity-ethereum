@@ -389,7 +389,6 @@ impl Miner {
 					// block not found - create it.
 					trace!(target: "miner", "prepare_block: No existing work - making new block");
 					let params = self.params.read().clone();
-
 					match chain.prepare_open_block(
 						params.author,
 						params.gas_range_target,
