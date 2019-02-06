@@ -206,7 +206,7 @@ impl ValidatorSafeContract {
 
 		match value {
 			Ok(new) => {
-				debug!(target: "engine", "Set of validators obtained: {:?}", new);
+				println!("Set of validators obtained: {:?}", new);
 				Some(SimpleList::new(new))
 			},
 			Err(s) => {

@@ -141,25 +141,22 @@ impl ValidatorSet for ValidatorContract {
 #[cfg(test)]
 mod tests {
 	use std::sync::Arc;
-	use rustc_hex::FromHex;
 	use hash::keccak;
 	use ethereum_types::{H520, Address};
-	use bytes::ToPretty;
 	use rlp::encode;
 	use spec::Spec;
 	use header::Header;
 	use account_provider::AccountProvider;
 	use miner::MinerService;
-	use types::ids::BlockId;
 	use test_helpers::generate_dummy_client_with_spec_and_accounts;
-	use client::{BlockChainClient, ChainInfo, BlockInfo, CallContract};
+	use client::{ChainInfo, BlockInfo};
 	use super::super::ValidatorSet;
 	use super::ValidatorContract;
 
 	#[test]
 	fn fetches_validators() {
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_validator_contract, None);
-		let vc = Arc::new(ValidatorContract::new("0000000000000000000000000000000000000005".parse::<Address>().unwrap()));
+		let vc = Arc::new(ValidatorContract::new("1000000000000000000000000000000000000001".parse::<Address>().unwrap()));
 		vc.register_client(Arc::downgrade(&client) as _);
 		let last_hash = client.best_block_header().hash();
 		assert!(vc.contains(&last_hash, &"7d577a597b2742b498cb5cf0c26cdcd726d39e6e".parse::<Address>().unwrap()));
@@ -170,9 +167,10 @@ mod tests {
 	fn reports_validators() {
 		let tap = Arc::new(AccountProvider::transient_provider());
 		let v1 = tap.insert_account(keccak("1").into(), &"".into()).unwrap();
+		tap.unlock_account_permanently(v1, "".into()).expect("unlock account");
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_validator_contract, Some(tap.clone()));
 		client.engine().register_client(Arc::downgrade(&client) as _);
-		let validator_contract = "0000000000000000000000000000000000000005".parse::<Address>().unwrap();
+		// let validator_contract = "1000000000000000000000000000000000000001".parse::<Address>().unwrap();
 
 		// Make sure reporting can be done.
 		client.miner().set_gas_range_target((1_000_000.into(), 1_000_000.into()));
@@ -201,11 +199,13 @@ mod tests {
 		// Seal a block.
 		client.engine().step();
 		assert_eq!(client.chain_info().best_block_number, 1);
-		// Check if the unresponsive validator is `disliked`.
-		assert_eq!(
-			client.call_contract(BlockId::Latest, validator_contract, "d8f2e0bf".from_hex().unwrap()).unwrap().to_hex(),
-			"0000000000000000000000007d577a597b2742b498cb5cf0c26cdcd726d39e6e"
-		);
+		// TODO: In the current contracts, there is no `disliked` field anymore. This should be updated and re-enabled
+		// if a method to check for benign misbehavior reports is added.
+		// // Check if the unresponsive validator is `disliked`.
+		// assert_eq!(
+		// 	client.call_contract(BlockId::Latest, validator_contract, "d8f2e0bf".from_hex().unwrap()).unwrap().to_hex(),
+		// 	"0000000000000000000000007d577a597b2742b498cb5cf0c26cdcd726d39e6e"
+		// );
 		// Simulate a misbehaving validator by handling a double proposal.
 		let header = client.best_block_header();
 		assert!(client.engine().verify_block_family(&header, &header).is_err());
@@ -214,10 +214,11 @@ mod tests {
 		client.engine().step();
 		assert_eq!(client.chain_info().best_block_number, 2);
 
+		// TODO: Benign reports currently don't cause the validator to be removed.
 		// Check if misbehaving validator was removed.
-		client.transact_contract(Default::default(), Default::default()).unwrap();
-		client.engine().step();
-		client.engine().step();
-		assert_eq!(client.chain_info().best_block_number, 2);
+		// client.transact_contract(Default::default(), Default::default()).unwrap();
+		// client.engine().step();
+		// client.engine().step();
+		// assert_eq!(client.chain_info().best_block_number, 2);
 	}
 }
