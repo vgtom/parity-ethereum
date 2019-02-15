@@ -315,22 +315,13 @@ impl ValidatorSet for ValidatorSafeContract {
 		trace!(target: "engine", "New block issued #{} ― calling emitInitiateChange()", header.number());
 
 		let (data, _decoder) = validator_set::functions::emit_initiate_change::call();
-		let mut queued_reports = self
-			.queued_reports
+		let mut queued_reports = self.queued_reports
 			.lock()
 			.expect("PoisonError only happens if we panic under a lock; we don’t catch panics, so \
-			we would have crashed in that case; qed");
-		while let Some((address, data)) = queued_reports.pop() {
-			match caller(self.contract_address, data.clone()) {
-				Ok(_) => warn!(target: "engine", "Reported malicious validator {}", address),
-				Err(s) => {
-					warn!(target: "engine", "Validator {} could not be reported {}", address, s);
-					queued_reports.push((address, data));
-					break
-				}
-			}
-		}
-		Ok(vec![(self.contract_address, data)])
+			we would have crashed in that case; qed")
+			.clone();
+		queued_reports.push((self.contract_address, data));
+		Ok(queued_reports)
 	}
 
 	fn on_epoch_begin(&self, _first: bool, _header: &Header, caller: &mut SystemCall) -> Result<(), ::error::Error> {
