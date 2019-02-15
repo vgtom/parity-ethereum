@@ -25,7 +25,7 @@ use machine::{AuxiliaryData, Call, EthereumMachine};
 use parking_lot::RwLock;
 use types::BlockNumber;
 use types::header::Header;
-use types::transaction::Action;
+use types::transaction::{self, Action};
 
 use client::EngineClient;
 
@@ -38,7 +38,7 @@ use_contract!(validator_report, "res/contracts/validator_report.json");
 pub struct ValidatorContract {
 	contract_address: Address,
 	validators: ValidatorSafeContract,
-	client: RwLock<Option<Weak<EngineClient>>>, // TODO [keorn]: remove
+	client: RwLock<Option<Weak<dyn EngineClient>>>, // TODO [keorn]: remove
 }
 
 impl ValidatorContract {
@@ -52,16 +52,17 @@ impl ValidatorContract {
 }
 
 impl ValidatorContract {
-	fn transact(&self, data: Bytes) -> Result<(), String> {
+	fn transact(&self, data: Bytes) -> Result<(), ::error::Error> {
 		let client = self.client.read().as_ref()
 			.and_then(Weak::upgrade)
 			.ok_or_else(|| "No client!")?;
 
 		match client.as_full_client() {
 			Some(c) => {
-				c.transact(Action::Call(self.contract_address), data, None, Some(0.into()))
-					.map_err(|e| format!("Transaction import error: {}", e))?;
-				Ok(())
+				match c.transact(Action::Call(self.contract_address), data, None, Some(0.into()), None) {
+					Ok(()) | Err(transaction::Error::AlreadyImported) => Ok(()),
+					Err(e) => Err(e)?,
+				}
 			},
 			None => Err("No full client!".into()),
 		}
@@ -82,6 +83,10 @@ impl ValidatorSet for ValidatorContract {
 
 	fn on_epoch_begin(&self, first: bool, header: &Header, call: &mut SystemCall) -> Result<(), ::error::Error> {
 		self.validators.on_epoch_begin(first, header, call)
+	}
+
+	fn on_close_block(&self, header: &Header, address: &Address) -> Result<(), ::error::Error> {
+		self.validators.on_close_block(header, address)
 	}
 
 	fn genesis_epoch_data(&self, header: &Header, call: &Call) -> Result<Vec<u8>, String> {
@@ -117,18 +122,21 @@ impl ValidatorSet for ValidatorContract {
 		self.validators.count_with_caller(bh, caller)
 	}
 
-	fn report_malicious(&self, address: &Address, _set_block: BlockNumber, block: BlockNumber, proof: Bytes) {
+	fn report_malicious(&self, address: &Address, set_block: BlockNumber, block: BlockNumber, proof: Bytes) {
 		let data = validator_report::functions::report_malicious::encode_input(*address, block, proof);
-		match self.transact(data) {
-			Ok(_) => warn!(target: "engine", "Reported malicious validator {}", address),
-			Err(s) => warn!(target: "engine", "Validator {} could not be reported {}", address, s),
+		match self.transact(data.clone()) {
+			Ok(()) => warn!(target: "engine", "Reported malicious validator {} at block {}", address, set_block),
+			Err(s) => {
+				warn!(target: "engine", "Validator {} could not be reported ({}) on block {}", address, s, set_block);
+				self.validators.queue_report((*address, set_block, data))
+			}
 		}
 	}
 
 	fn report_benign(&self, address: &Address, _set_block: BlockNumber, block: BlockNumber) {
 		let data = validator_report::functions::report_benign::encode_input(*address, block);
 		match self.transact(data) {
-			Ok(_) => warn!(target: "engine", "Reported benign validator misbehaviour {}", address),
+			Ok(()) => warn!(target: "engine", "Reported benign validator misbehaviour {}", address),
 			Err(s) => warn!(target: "engine", "Validator {} could not be reported {}", address, s),
 		}
 	}
@@ -223,7 +231,7 @@ mod tests {
 		assert_eq!(client.chain_info().best_block_number, 2);
 
 		// Check if misbehaving validator was removed.
-		client.transact_contract(Default::default(), Default::default()).unwrap();
+		client.transact_contract(Default::default(), Default::default(), Default::default()).unwrap();
 		client.engine().step();
 		client.engine().step();
 		assert_eq!(client.chain_info().best_block_number, 2);

@@ -16,6 +16,7 @@
 
 /// Validator set maintained in a contract, updated using `getValidators` method.
 
+use std::collections::VecDeque;
 use std::sync::{Weak, Arc};
 
 use bytes::Bytes;
@@ -24,12 +25,13 @@ use ethereum_types::{H256, U256, Address, Bloom};
 use hash::keccak;
 use kvdb::DBValue;
 use memory_cache::MemoryLruCache;
-use parking_lot::RwLock;
+use parking_lot::{RwLock, Mutex};
 use rlp::{Rlp, RlpStream};
 use types::header::Header;
 use types::ids::BlockId;
 use types::log_entry::LogEntry;
 use types::receipt::Receipt;
+use types::transaction::{self, Action};
 use unexpected::Mismatch;
 
 use client::EngineClient;
@@ -38,6 +40,9 @@ use super::{SystemCall, ValidatorSet};
 use super::simple_list::SimpleList;
 
 use_contract!(validator_set, "res/contracts/validator_set_aura.json");
+
+/// The maximum number of reports to keep queued.
+const MAX_QUEUED_REPORTS: usize = 10;
 
 const MEMOIZE_CAPACITY: usize = 500;
 
@@ -76,6 +81,7 @@ pub struct ValidatorSafeContract {
 	contract_address: Address,
 	validators: RwLock<MemoryLruCache<H256, SimpleList>>,
 	client: RwLock<Option<Weak<EngineClient>>>, // TODO [keorn]: remove
+	queued_reports: Mutex<VecDeque<(Address, u64, Vec<u8>)>>,
 }
 
 // first proof is just a state proof call of `getValidators` at header's state.
@@ -191,11 +197,34 @@ fn prove_initial(contract_address: Address, header: &Header, caller: &Call) -> R
 }
 
 impl ValidatorSafeContract {
+	fn transact(&self, data: Bytes, nonce: U256) -> Result<(), ::error::Error> {
+		let client = self.client.read().as_ref()
+			.and_then(Weak::upgrade)
+			.ok_or_else(|| "No client!")?;
+
+		match client.as_full_client() {
+			Some(c) => {
+				match c.transact(Action::Call(self.contract_address), data, None, Some(0.into()), Some(nonce)) {
+					Ok(()) | Err(transaction::Error::AlreadyImported) => Ok(()),
+					Err(e) => Err(e)?,
+				}
+			},
+			None => Err("No full client!".into()),
+		}
+	}
+
+	pub(crate) fn queue_report(&self, data: (Address, u64, Vec<u8>)) {
+		self.queued_reports
+			.lock()
+			.push_back(data)
+	}
+
 	pub fn new(contract_address: Address) -> Self {
 		ValidatorSafeContract {
 			contract_address,
 			validators: RwLock::new(MemoryLruCache::new(MEMOIZE_CAPACITY)),
 			client: RwLock::new(None),
+			queued_reports: Mutex::new(VecDeque::new()),
 		}
 	}
 
@@ -295,17 +324,87 @@ impl ValidatorSet for ValidatorSafeContract {
 		-> Result<Vec<(Address, Bytes)>, ::error::Error>
 	{
 		let (data, decoder) = validator_set::functions::emit_initiate_change_callable::call();
-		if !caller(self.contract_address, data)
+		let mut returned_transactions = if !caller(self.contract_address, data)
 			.and_then(|x| decoder.decode(&x)
 			.map_err(|x| format!("chain spec bug: could not decode: {:?}", x)))
 			.map_err(::engines::EngineError::FailedSystemCall)? {
 			trace!(target: "engine", "New block #{} issued ― no need to call emitInitiateChange()", header.number());
-			return Ok(Vec::new());
+			Vec::new()
+		} else {
+			trace!(target: "engine", "New block issued #{} ― calling emitInitiateChange()", header.number());
+			let (data, _decoder) = validator_set::functions::emit_initiate_change::call();
+			vec![(self.contract_address, data)]
+		};
+		let queued_reports = self.queued_reports.lock();
+		for (_address, _block, data) in queued_reports.iter().take(10) {
+			returned_transactions.push((self.contract_address, data.clone()))
+		}
+		Ok(returned_transactions)
+	}
+
+	fn on_close_block(&self, header: &Header, address: &Address) -> Result<(), ::error::Error> {
+		let client = self.client.read()
+			.as_ref()
+			.and_then(Weak::upgrade)
+			.ok_or_else(|| ::error::Error::from("No client!"))?;
+		let client = client
+			.as_full_client()
+			.ok_or_else(|| ::error::Error::from("No full client!"))?;
+		let nonce = client
+			.nonce(&self.contract_address, BlockId::Latest)
+			.ok_or_else(||"No nonce!")?;
+		let mut i = 0u64;
+		debug!(target: "engine", "Checking for cached reports");
+		for (address, block, data) in self.queued_reports.lock().iter() {
+			debug!(target: "engine", "Trying to report");
+			loop {
+				match self.transact(data.clone(), nonce + U256::from(i)) {
+					Ok(()) => break,
+					Err(err) => {
+						let msg = format!("{}", err);
+						if msg != "Transaction import error: Transaction error (No longer valid)" {
+							warn!(target: "engine", "Cannot report validator {} for misbehavior on block {}: {}", address, block, err);
+							break
+						}
+					}
+				}
+				i += 1
+			};
+			i += 1
+		}
+		let mut queue = self.queued_reports.lock();
+		queue.retain(|&(malicious_validator_address, block, ref _data)| {
+			debug!(target: "engine", "Checking if report can be removed from cache");
+			let result = {
+				let current_block_number = header.number();
+				if block > current_block_number {
+					return false // Report cannot be used, as it is for a block that isn’t in the current chain
+				}
+				if current_block_number > 100 && current_block_number - 100 > block {
+					return false // Report is too old and cannot be used
+				}
+				let (data, decoder) = validator_set::functions::malice_reported_for_block::call(
+					malicious_validator_address, block);
+				let result = client.call_contract(BlockId::Latest, self.contract_address, data)
+					.expect("this is a bug in the genesis block; either the validator set contract is missing, or it is invalid; this is a fatal error in the configuration of Parity, so we cannot recover; qed");
+				decoder.decode(&result[..])
+					.expect("this is a bug in the genesis block; either the validator set contract is missing, or it is invalid; this is a fatal error in the configuration of Parity, so we cannot recover; qed")
+			};
+			debug!(target: "engine", "Got data from contract: {:?}", result);
+			if result.contains(&address) {
+				debug!(target: "engine", "Successfully removed report from report cache");
+				return false
+			}
+			return true
+		});
+
+		while queue.len() > MAX_QUEUED_REPORTS {
+			warn!(target: "engine", "Removing report from report cache, even though it has not \
+			been finalized");
+			drop(queue.pop_front())
 		}
 
-		trace!(target: "engine", "New block issued #{} ― calling emitInitiateChange()", header.number());
-		let (data, _decoder) = validator_set::functions::emit_initiate_change::call();
-		Ok(vec![(self.contract_address, data)])
+		Ok(())
 	}
 
 	fn on_epoch_begin(&self, _first: bool, _header: &Header, caller: &mut SystemCall) -> Result<(), ::error::Error> {
