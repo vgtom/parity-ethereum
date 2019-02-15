@@ -29,7 +29,7 @@ use memory_cache::MemoryLruCache;
 use parking_lot::RwLock;
 use receipt::Receipt;
 use rlp::{Rlp, RlpStream};
-use std::sync::{Weak, Arc};
+use std::sync::{Weak, Arc, Mutex};
 use super::{SystemCall, ValidatorSet};
 use super::simple_list::SimpleList;
 use unexpected::Mismatch;
@@ -74,6 +74,7 @@ pub struct ValidatorSafeContract {
 	contract_address: Address,
 	validators: RwLock<MemoryLruCache<H256, SimpleList>>,
 	client: RwLock<Option<Weak<EngineClient>>>, // TODO [keorn]: remove
+	queued_reports: Mutex<Vec<(Address, Vec<u8>)>>,
 }
 
 // first proof is just a state proof call of `getValidators` at header's state.
@@ -189,11 +190,21 @@ fn prove_initial(contract_address: Address, header: &Header, caller: &Call) -> R
 }
 
 impl ValidatorSafeContract {
+
+	pub(crate) fn queue_report(&self, data: (Address, Vec<u8>)) {
+		self.queued_reports
+			.lock()
+			.expect("PoisonError only happens if we panic under a lock; we don’t catch panics, so \
+			we would have crashed in that case; qed")
+			.push(data)
+	}
+
 	pub fn new(contract_address: Address) -> Self {
 		ValidatorSafeContract {
 			contract_address,
 			validators: RwLock::new(MemoryLruCache::new(MEMOIZE_CAPACITY)),
 			client: RwLock::new(None),
+			queued_reports: Mutex::new(vec![]),
 		}
 	}
 
@@ -302,7 +313,23 @@ impl ValidatorSet for ValidatorSafeContract {
 		}
 
 		trace!(target: "engine", "New block issued #{} ― calling emitInitiateChange()", header.number());
+
 		let (data, _decoder) = validator_set::functions::emit_initiate_change::call();
+		let mut queued_reports = self
+			.queued_reports
+			.lock()
+			.expect("PoisonError only happens if we panic under a lock; we don’t catch panics, so \
+			we would have crashed in that case; qed");
+		while let Some((address, data)) = queued_reports.pop() {
+			match caller(self.contract_address, data.clone()) {
+				Ok(_) => warn!(target: "engine", "Reported malicious validator {}", address),
+				Err(s) => {
+					warn!(target: "engine", "Validator {} could not be reported {}", address, s);
+					queued_reports.push((address, data));
+					break
+				}
+			}
+		}
 		Ok(vec![(self.contract_address, data)])
 	}
 
