@@ -26,14 +26,16 @@ use kvdb::DBValue;
 use log_entry::LogEntry;
 use machine::{AuxiliaryData, Call, EthereumMachine, AuxiliaryRequest};
 use memory_cache::MemoryLruCache;
-use parking_lot::RwLock;
+use parking_lot::{RwLock, Mutex};
+use transaction::Action;
 use receipt::Receipt;
 use rlp::{Rlp, RlpStream};
-use std::sync::{Weak, Arc, Mutex};
+use std::sync::{Weak, Arc};
 use super::{SystemCall, ValidatorSet};
 use super::simple_list::SimpleList;
 use unexpected::Mismatch;
 use ethabi::FunctionOutputDecoder;
+use ::error::Error;
 
 use_contract!(validator_set, "res/contracts/validator_set_aura.json");
 
@@ -191,12 +193,31 @@ fn prove_initial(contract_address: Address, header: &Header, caller: &Call) -> R
 
 impl ValidatorSafeContract {
 
+	fn transact(&self, data: Bytes, nonce: U256) -> Result<(), String> {
+		let client = self.client.read().as_ref()
+			.and_then(Weak::upgrade)
+			.ok_or_else(|| "No client!")?;
+
+		match client.as_full_client() {
+			Some(c) => {
+				c.transact(Action::Call(self.contract_address), data, None, Some(0.into()), Some(nonce))
+					.map_err(|e| format!("Transaction import error: {}", e))?;
+				Ok(())
+			},
+			None => Err("No full client!".into()),
+		}
+	}
+
 	pub(crate) fn queue_report(&self, data: (Address, Vec<u8>)) {
 		self.queued_reports
 			.lock()
-			.expect("PoisonError only happens if we panic under a lock; we don’t catch panics, so \
-			we would have crashed in that case; qed")
 			.push(data)
+	}
+
+	fn queued_reports(&self) -> Vec<(Address, Bytes)> {
+		self.queued_reports
+			.lock()
+			.clone()
 	}
 
 	pub fn new(contract_address: Address) -> Self {
@@ -315,13 +336,22 @@ impl ValidatorSet for ValidatorSafeContract {
 		trace!(target: "engine", "New block issued #{} ― calling emitInitiateChange()", header.number());
 
 		let (data, _decoder) = validator_set::functions::emit_initiate_change::call();
-		let mut queued_reports = self.queued_reports
-			.lock()
-			.expect("PoisonError only happens if we panic under a lock; we don’t catch panics, so \
-			we would have crashed in that case; qed")
-			.clone();
+		let mut queued_reports = self.queued_reports();
 		queued_reports.push((self.contract_address, data));
 		Ok(queued_reports)
+	}
+
+	fn on_close_block(&self, _header: &Header) -> Result<(), ::error::Error> {
+		let nonce = self.client.read()
+			.as_ref()
+			.and_then(Weak::upgrade)
+			.ok_or_else(||::error::Error::from("No client!"))?
+			.nonce(&self.contract_address, BlockId::Latest)
+			.ok_or_else(||"No nonce!")?;
+		for (i, (_address, data)) in self.queued_reports().into_iter().enumerate() {
+			self.transact(data, nonce + U256::from(i))?
+		}
+		Ok(())
 	}
 
 	fn on_epoch_begin(&self, _first: bool, _header: &Header, caller: &mut SystemCall) -> Result<(), ::error::Error> {

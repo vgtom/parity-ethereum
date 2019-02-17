@@ -24,7 +24,7 @@ use ethereum_types::{H256, Address};
 use parking_lot::RwLock;
 use transaction::Action;
 
-use client::EngineClient;
+use client::{EngineClient, Nonce};
 use header::{Header, BlockNumber};
 use machine::{AuxiliaryData, Call, EthereumMachine};
 
@@ -37,7 +37,7 @@ use_contract!(validator_report, "res/contracts/validator_report.json");
 pub struct ValidatorContract {
 	contract_address: Address,
 	validators: ValidatorSafeContract,
-	client: RwLock<Option<Weak<EngineClient>>>, // TODO [keorn]: remove
+	client: RwLock<Option<Weak<dyn EngineClient>>>, // TODO [keorn]: remove
 }
 
 impl ValidatorContract {
@@ -58,7 +58,7 @@ impl ValidatorContract {
 
 		match client.as_full_client() {
 			Some(c) => {
-				c.transact(Action::Call(self.contract_address), data, None, Some(0.into()))
+				c.transact(Action::Call(self.contract_address), data, None, Some(0.into()), None)
 					.map_err(|e| format!("Transaction import error: {}", e))?;
 				Ok(())
 			},
@@ -81,6 +81,10 @@ impl ValidatorSet for ValidatorContract {
 
 	fn on_epoch_begin(&self, first: bool, header: &Header, call: &mut SystemCall) -> Result<(), ::error::Error> {
 		self.validators.on_epoch_begin(first, header, call)
+	}
+
+	fn on_close_block(&self, header: &Header) -> Result<(), ::error::Error> {
+		self.validators.on_close_block(header)
 	}
 
 	fn genesis_epoch_data(&self, header: &Header, call: &Call) -> Result<Vec<u8>, String> {
@@ -223,7 +227,7 @@ mod tests {
 		assert_eq!(client.chain_info().best_block_number, 2);
 
 		// Check if misbehaving validator was removed.
-		client.transact_contract(Default::default(), Default::default()).unwrap();
+		client.transact_contract(Default::default(), Default::default(), Default::default()).unwrap();
 		client.engine().step();
 		client.engine().step();
 		assert_eq!(client.chain_info().best_block_number, 2);
