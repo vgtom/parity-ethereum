@@ -15,7 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 //! General error types for use in ethcore.
-
+#![allow(deprecated)]
 use std::{fmt, error};
 use std::time::SystemTime;
 use ethereum_types::{H256, U256, Address, Bloom};
