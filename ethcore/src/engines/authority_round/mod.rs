@@ -97,6 +97,12 @@ pub struct AuthorityRoundParams {
 	pub strict_empty_steps_transition: u64,
 	/// If set, enables random number contract integration.
 	pub randomness_contract_address: Option<Address>,
+	/// A list of addresses, and block numbers at which these should be reported as malicious.
+	/// FOR TESTING ONLY!!
+	pub report_malicious: BTreeMap<u64, Address>,
+	/// Block at which we start producing blocks with an invalid header (wrong step number).
+	/// FOR TESTING ONLY!!
+	pub faulty_blocks_transition: BTreeMap<Address, u64>,
 }
 
 const U16_MAX: usize = ::std::u16::MAX as usize;
@@ -129,6 +135,12 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 			quorum_2_3_transition: p.quorum_2_3_transition.map_or_else(BlockNumber::max_value, Into::into),
 			strict_empty_steps_transition: p.strict_empty_steps_transition.map_or(0, Into::into),
 			randomness_contract_address: p.randomness_contract_address.map(Into::into),
+			report_malicious: p.report_malicious.map_or_else(BTreeMap::new, |rm| {
+				rm.into_iter().map(|(block, addr)| (block.into(), addr.into())).collect()
+			}),
+			faulty_blocks_transition: p.faulty_blocks_transition.map_or_else(BTreeMap::new, |fbt| {
+				fbt.into_iter().map(|(addr, t)| (addr.into(), t.into())).collect()
+			}),
 		}
 	}
 }
@@ -453,6 +465,12 @@ pub struct AuthorityRound {
 	machine: EthereumMachine,
 	/// If set, enables random number contract integration.
 	randomness_contract_address: Option<Address>,
+	/// A list of addresses, and block numbers at which these should be reported as malicious.
+	/// FOR TESTING ONLY!!
+	report_malicious: BTreeMap<u64, Address>,
+	/// Block at which we start producing blocks with an invalid header (wrong step number).
+	/// FOR TESTING ONLY!!
+	faulty_blocks_transition: BTreeMap<Address, u64>,
 }
 
 // header-chain validator.
@@ -720,6 +738,8 @@ impl AuthorityRound {
 				strict_empty_steps_transition: our_params.strict_empty_steps_transition,
 				machine: machine,
 				randomness_contract_address: our_params.randomness_contract_address,
+				report_malicious: our_params.report_malicious,
+				faulty_blocks_transition: our_params.faulty_blocks_transition,
 			});
 
 		// Do not initialize timeouts for tests.
@@ -905,6 +925,15 @@ impl AuthorityRound {
 		let finalized = epoch_manager.finality_checker.push_hash(
 			chain_head.hash(), chain_head.number(), vec![*chain_head.author()]);
 		finalized.unwrap_or_default()
+	}
+
+	fn should_produce_faulty_block(&self, header: &Header) -> bool {
+		let opt_signer = self.signer.read();
+		let addr = match opt_signer.as_ref() {
+			Some(signer) => signer.address(),
+			None => return false,
+		};
+		self.faulty_blocks_transition.get(&addr).map_or(true, |t| *t > header.number())
 	}
 }
 
@@ -1184,10 +1213,18 @@ impl Engine<EthereumMachine> for AuthorityRound {
 						self.report_skipped(header, step, parent_step, &*validators, set_number);
 					}
 
-					let mut fields = vec![
-						encode(&step),
-						encode(&(&H520::from(signature) as &[u8])),
-					];
+					let mut fields = if self.should_produce_faulty_block(&header) {
+						vec![
+							encode(&step),
+							encode(&(&H520::from(signature) as &[u8])),
+						]
+					} else {
+						trace!(target: "engine", "GENERATING FAULTY SEAL!");
+						vec![
+							encode(&step.saturating_sub(3)),
+							encode(&(&H520::from(signature) as &[u8])),
+						]
+					};
 
 					if let Some(empty_steps_rlp) = empty_steps_rlp {
 						fields.push(empty_steps_rlp);
@@ -1393,10 +1430,17 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		// Ensure header is from the step after parent.
 		if step == parent_step
 			|| (header.number() >= self.validate_step_transition && step <= parent_step) {
-			trace!(target: "engine", "Multiple blocks proposed for step {}.", parent_step);
+			if self.should_produce_faulty_block(&header) {
+				trace!(target: "engine", "Multiple blocks proposed for step {}.", parent_step);
+				self.validators.report_malicious(header.author(), set_number, header.number(), Default::default());
+				Err(EngineError::DoubleVote(*header.author()))?;
+			}
+		}
 
-			self.validators.report_malicious(header.author(), set_number, header.number(), Default::default());
-			Err(EngineError::DoubleVote(*header.author()))?;
+		if let Some(addr) = self.report_malicious.get(&header.number()) {
+			// TEST CODE: DO NOT MERGE INTO ANY PRODUCTION BRANCH!
+			warn!(target: "engine", "Reporting {} as malicious FOR TESTING PURPOSES.", addr);
+			self.validators.report_malicious(addr, set_number, header.number(), Default::default());
 		}
 
 		// If empty step messages are enabled we will validate the messages in the seal, missing messages are not
@@ -1455,7 +1499,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 
 		if header.number() >= self.validate_score_transition {
 			let expected_difficulty = calculate_score(parent_step.into(), step.into(), empty_steps_len.into());
-			if header.difficulty() != &expected_difficulty {
+			if header.difficulty() != &expected_difficulty && !self.should_produce_faulty_block(&header) {
 				return Err(From::from(BlockError::InvalidDifficulty(Mismatch { expected: expected_difficulty, found: header.difficulty().clone() })));
 			}
 		}
