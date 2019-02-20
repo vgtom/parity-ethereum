@@ -16,6 +16,7 @@
 
 //! Authority params deserialization.
 
+use std::collections::BTreeMap;
 use hash::Address;
 use uint::Uint;
 use bytes::Bytes;
@@ -68,6 +69,12 @@ pub struct AuthorityRoundParams {
 	/// Stake (PoS) consensus.  Otherwise, use Proof of Authority (PoA)
 	/// consensus.
 	pub randomness_contract_address: Option<Address>,
+	/// These addresses will be reported as malicious at the given block numbers.
+	/// FOR TESTING ONLY!!
+	pub report_malicious: Option<BTreeMap<Uint, Address>>,
+	/// Block at which we start producing blocks with an invalid header (wrong step number).
+	/// FOR TESTING ONLY!!
+	pub faulty_blocks_transition: Option<BTreeMap<Address, Uint>>,
 }
 
 /// Authority engine deserialization.
