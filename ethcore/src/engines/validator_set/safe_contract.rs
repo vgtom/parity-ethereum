@@ -35,7 +35,6 @@ use super::{SystemCall, ValidatorSet};
 use super::simple_list::SimpleList;
 use unexpected::Mismatch;
 use ethabi::FunctionOutputDecoder;
-use ::error::Error;
 
 use_contract!(validator_set, "res/contracts/validator_set_aura.json");
 
@@ -336,9 +335,10 @@ impl ValidatorSet for ValidatorSafeContract {
 		trace!(target: "engine", "New block issued #{} ― calling emitInitiateChange()", header.number());
 
 		let (data, _decoder) = validator_set::functions::emit_initiate_change::call();
-		let mut queued_reports = self.queued_reports();
-		queued_reports.push((self.contract_address, data));
-		Ok(queued_reports)
+		let mut returned_transactions = vec![(self.contract_address, data)];
+		let queued_reports = self.queued_reports.lock();
+		returned_transactions.extend_from_slice(&queued_reports[..]);
+		Ok(returned_transactions)
 	}
 
 	fn on_close_block(&self, _header: &Header) -> Result<(), ::error::Error> {

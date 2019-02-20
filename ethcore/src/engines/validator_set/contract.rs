@@ -24,7 +24,7 @@ use ethereum_types::{H256, Address};
 use parking_lot::RwLock;
 use transaction::Action;
 
-use client::{EngineClient, Nonce};
+use client::EngineClient;
 use header::{Header, BlockNumber};
 use machine::{AuxiliaryData, Call, EthereumMachine};
 
