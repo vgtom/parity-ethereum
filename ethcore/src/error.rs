@@ -154,49 +154,111 @@ impl error::Error for BlockError {
 	}
 }
 
-error_chain! {
-	types {
-		QueueError, QueueErrorKind, QueueErrorResultExt, QueueErrorResult;
-	}
+#[allow(deprecated)]
+mod internal {
+	use super::*;
+	error_chain! {
+		types {
+			QueueError, QueueErrorKind, QueueErrorResultExt, QueueErrorResult;
+		}
 
-	errors {
-		#[doc = "Queue is full"]
-		Full(limit: usize) {
-			description("Queue is full")
-			display("The queue is full ({})", limit)
+		errors {
+			/// Queue is full
+			Full(limit: usize) {
+				description("Queue is full")
+				display("The queue is full ({})", limit)
+			}
+		}
+
+		foreign_links {
+			Channel(IoError) #[doc = "Io channel error"];
 		}
 	}
 
-	foreign_links {
-		Channel(IoError) #[doc = "Io channel error"];
+	error_chain! {
+		types {
+			ImportError, ImportErrorKind, ImportErrorResultExt, ImportErrorResult;
+		}
+
+		errors {
+			/// Already in the block chain.
+			AlreadyInChain {
+				description("Block already in chain")
+				display("Block already in chain")
+			}
+
+			/// Already in the block queue
+			AlreadyQueued {
+				description("block already in the block queue")
+				display("block already in the block queue")
+			}
+
+			/// Already marked as bad from a previous import (could mean parent is bad)
+			KnownBad {
+				description("block known to be bad")
+				display("block known to be bad")
+			}
+		}
+	}
+
+	error_chain! {
+		types {
+			Error, ErrorKind, ErrorResultExt, EthcoreResult;
+		}
+
+		links {
+			Import(ImportError, ImportErrorKind) #[doc = "Error concerning block import." ];
+			Queue(QueueError, QueueErrorKind) #[doc = "Io channel queue error"];
+		}
+
+		foreign_links {
+			Io(IoError) #[doc = "Io create error"];
+			StdIo(::std::io::Error) #[doc = "Error concerning the Rust standard library's IO subsystem."];
+			Trie(TrieError) #[doc = "Error concerning TrieDBs."];
+			Execution(ExecutionError) #[doc = "Error concerning EVM code execution."];
+			Block(BlockError) #[doc = "Error concerning block processing."];
+			Transaction(TransactionError) #[doc = "Error concerning transaction processing."];
+			Snappy(InvalidInput) #[doc = "Snappy error."];
+			Engine(EngineError) #[doc = "Consensus vote error."];
+			Ethkey(EthkeyError) #[doc = "Ethkey error."];
+			Decoder(rlp::DecoderError) #[doc = "RLP decoding errors"];
+		}
+
+		errors {
+			#[doc = "Snapshot error."]
+			Snapshot(err: SnapshotError) {
+				description("Snapshot error.")
+				display("Snapshot error {}", err)
+			}
+
+			#[doc = "Account Provider error"]
+			AccountProvider(err: AccountsError) {
+				description("Accounts Provider error")
+				display("Accounts Provider error {}", err)
+			}
+
+			#[doc = "PoW hash is invalid or out of date."]
+			PowHashInvalid {
+				description("PoW hash is invalid or out of date.")
+				display("PoW hash is invalid or out of date.")
+			}
+
+			#[doc = "The value of the nonce or mishash is invalid."]
+			PowInvalid {
+				description("The value of the nonce or mishash is invalid.")
+				display("The value of the nonce or mishash is invalid.")
+			}
+
+			#[doc = "Unknown engine given"]
+			UnknownEngineName(name: String) {
+				description("Unknown engine name")
+				display("Unknown engine name ({})", name)
+			}
+		}
 	}
 }
 
-error_chain! {
-	types {
-		ImportError, ImportErrorKind, ImportErrorResultExt, ImportErrorResult;
-	}
-
-	errors {
-		#[doc = "Already in the block chain."]
-		AlreadyInChain {
-			description("Block already in chain")
-			display("Block already in chain")
-		}
-
-		#[doc = "Already in the block queue"]
-		AlreadyQueued {
-			description("block already in the block queue")
-			display("block already in the block queue")
-		}
-
-		#[doc = "Already marked as bad from a previous import (could mean parent is bad)."]
-		KnownBad {
-			description("block known to be bad")
-			display("block known to be bad")
-		}
-	}
-}
+pub use self::internal::*;
 
 /// Api-level error for transaction import
 #[derive(Debug, Clone)]
@@ -212,62 +274,6 @@ impl From<Error> for TransactionImportError {
 		match e {
 			Error(ErrorKind::Transaction(transaction_error), _) => TransactionImportError::Transaction(transaction_error),
 			_ => TransactionImportError::Other(format!("other block import error: {:?}", e)),
-		}
-	}
-}
-
-error_chain! {
-	types {
-		Error, ErrorKind, ErrorResultExt, EthcoreResult;
-	}
-
-	links {
-		Import(ImportError, ImportErrorKind) #[doc = "Error concerning block import." ];
-		Queue(QueueError, QueueErrorKind) #[doc = "Io channel queue error"];
-	}
-
-	foreign_links {
-		Io(IoError) #[doc = "Io create error"];
-		StdIo(::std::io::Error) #[doc = "Error concerning the Rust standard library's IO subsystem."];
-		Trie(TrieError) #[doc = "Error concerning TrieDBs."];
-		Execution(ExecutionError) #[doc = "Error concerning EVM code execution."];
-		Block(BlockError) #[doc = "Error concerning block processing."];
-		Transaction(TransactionError) #[doc = "Error concerning transaction processing."];
-		Snappy(InvalidInput) #[doc = "Snappy error."];
-		Engine(EngineError) #[doc = "Consensus vote error."];
-		Ethkey(EthkeyError) #[doc = "Ethkey error."];
-		Decoder(rlp::DecoderError) #[doc = "RLP decoding errors"];
-	}
-
-	errors {
-		#[doc = "Snapshot error."]
-		Snapshot(err: SnapshotError) {
-			description("Snapshot error.")
-			display("Snapshot error {}", err)
-		}
-
-		#[doc = "Account Provider error"]
-		AccountProvider(err: AccountsError) {
-			description("Accounts Provider error")
-			display("Accounts Provider error {}", err)
-		}
-
-		#[doc = "PoW hash is invalid or out of date."]
-		PowHashInvalid {
-			description("PoW hash is invalid or out of date.")
-			display("PoW hash is invalid or out of date.")
-		}
-
-		#[doc = "The value of the nonce or mishash is invalid."]
-		PowInvalid {
-			description("The value of the nonce or mishash is invalid.")
-			display("The value of the nonce or mishash is invalid.")
-		}
-
-		#[doc = "Unknown engine given"]
-		UnknownEngineName(name: String) {
-			description("Unknown engine name")
-			display("Unknown engine name ({})", name)
 		}
 	}
 }

@@ -59,6 +59,7 @@ pub const DEFAULT_QUERY_TIME_LIMIT: Duration = Duration::from_millis(10000);
 const NULL_DURATION: Duration = Duration::from_secs(0);
 
 /// OnDemand related errors
+#[allow(deprecated)]
 pub mod error {
 	use futures::sync::oneshot::Canceled;
 

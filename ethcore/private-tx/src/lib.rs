@@ -101,12 +101,6 @@ const INIT_VEC_LEN: usize = 16;
 /// Size of nonce cache
 const NONCE_CACHE_SIZE: usize = 128;
 
-/// Version for the initial private contract wrapper
-const INITIAL_PRIVATE_CONTRACT_VER: usize = 1;
-
-/// Version for the private contract notification about private state changes added
-const PRIVATE_CONTRACT_WITH_NOTIFICATION_VER: usize = 2;
-
 /// Configurtion for private transaction provider
 #[derive(Default, PartialEq, Debug, Clone)]
 pub struct ProviderConfig {
