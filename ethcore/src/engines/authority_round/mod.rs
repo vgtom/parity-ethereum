@@ -92,9 +92,11 @@ pub struct AuthorityRoundParams {
 	pub strict_empty_steps_transition: u64,
 	/// If set, enables random number contract integration.
 	pub randomness_contract_address: Option<Address>,
+	#[cfg(test)]
 	/// A list of addresses, and block numbers at which these should be reported as malicious.
 	/// FOR TESTING ONLY!!
 	pub report_malicious: BTreeMap<u64, Address>,
+	#[cfg(test)]
 	/// Block at which we start producing blocks with an invalid header (wrong step number).
 	/// FOR TESTING ONLY!!
 	pub faulty_blocks_transition: BTreeMap<Address, u64>,
@@ -129,9 +131,11 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 			maximum_empty_steps: p.maximum_empty_steps.map_or(0, Into::into),
 			strict_empty_steps_transition: p.strict_empty_steps_transition.map_or(0, Into::into),
 			randomness_contract_address: p.randomness_contract_address.map(Into::into),
+			#[cfg(test)]
 			report_malicious: p.report_malicious.map_or_else(BTreeMap::new, |rm| {
 				rm.into_iter().map(|(block, addr)| (block.into(), addr.into())).collect()
 			}),
+			#[cfg(test)]
 			faulty_blocks_transition: p.faulty_blocks_transition.map_or_else(BTreeMap::new, |fbt| {
 				fbt.into_iter().map(|(addr, t)| (addr.into(), t.into())).collect()
 			}),
@@ -451,9 +455,11 @@ pub struct AuthorityRound {
 	machine: EthereumMachine,
 	/// If set, enables random number contract integration.
 	randomness_contract_address: Option<Address>,
+	#[cfg(test)]
 	/// A list of addresses, and block numbers at which these should be reported as malicious.
 	/// FOR TESTING ONLY!!
 	report_malicious: BTreeMap<u64, Address>,
+	#[cfg(test)]
 	/// Block at which we start producing blocks with an invalid header (wrong step number).
 	/// FOR TESTING ONLY!!
 	faulty_blocks_transition: BTreeMap<Address, u64>,
@@ -711,7 +717,9 @@ impl AuthorityRound {
 				strict_empty_steps_transition: our_params.strict_empty_steps_transition,
 				machine: machine,
 				randomness_contract_address: our_params.randomness_contract_address,
+				#[cfg(test)]
 				report_malicious: our_params.report_malicious,
+				#[cfg(test)]
 				faulty_blocks_transition: our_params.faulty_blocks_transition,
 			});
 
@@ -724,6 +732,46 @@ impl AuthorityRound {
 			engine.transition_service.register_handler(Arc::new(handler))?;
 		}
 		Ok(engine)
+	}
+
+	#[cfg(test)]
+	/// Test malice report
+	fn test_only_report_malicious(&self, header: &Header, set_number: BlockNumber) {
+		if let Some(addr) = self.report_malicious.get(&header.number()) {
+			// TEST CODE: DO NOT MERGE INTO ANY PRODUCTION BRANCH, UNLESS GUARDED BY
+			// `#[cfg(test)]`!
+			warn!(target: "engine", "Reporting {} as malicious FOR TESTING PURPOSES.", addr);
+			self.validators.report_malicious(addr, set_number, header.number(), Default::default());
+		}
+	}
+
+	#[cfg(not(test))]
+	#[inline(always)]
+	/// Do nothing
+	fn test_only_report_malicious(&self, _header: &Header, _set_number: BlockNumber) { }
+
+	#[cfg(not(test))]
+	fn get_fields(&self, step: u64, signature: Signature, _header: &Header) -> Vec<Vec<u8>> {
+		vec![
+			encode(&step),
+			encode(&(&H520::from(signature) as &[u8])),
+		]
+	}
+
+	#[cfg(test)]
+	fn get_fields(&self, step: u64, signature: Signature, header: &Header) -> Vec<Vec<u8>> {
+		if self.should_produce_faulty_block(&header) {
+			vec![
+				encode(&step),
+				encode(&(&H520::from(signature) as &[u8])),
+			]
+		} else {
+			trace!(target: "engine", "GENERATING FAULTY SEAL!");
+			vec![
+				encode(&step.saturating_sub(3)),
+				encode(&(&H520::from(signature) as &[u8])),
+						]
+		}
 	}
 
 	// fetch correct validator set for epoch at header, taking into account
@@ -899,6 +947,7 @@ impl AuthorityRound {
 		finalized.unwrap_or_default()
 	}
 
+	#[cfg(test)]
 	fn should_produce_faulty_block(&self, header: &Header) -> bool {
 		let addr = if let Some(addr) = self.signer.read().address() {
 			addr
@@ -906,6 +955,11 @@ impl AuthorityRound {
 			return false;
 		};
 		self.faulty_blocks_transition.get(&addr).map_or(true, |t| *t > header.number())
+	}
+
+	#[cfg(not(test))]
+	fn should_produce_faulty_block(&self, _header: &Header) -> bool {
+		false
 	}
 }
 
@@ -1143,19 +1197,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 						self.report_skipped(header, step, parent_step, &*validators, set_number);
 					}
 
-					let mut fields = if self.should_produce_faulty_block(&header) {
-						vec![
-							encode(&step),
-							encode(&(&H520::from(signature) as &[u8])),
-						]
-					} else {
-						trace!(target: "engine", "GENERATING FAULTY SEAL!");
-						vec![
-							encode(&step.saturating_sub(3)),
-							encode(&(&H520::from(signature) as &[u8])),
-						]
-					};
-
+					let mut fields = self.get_fields(step, signature, header);
 					if let Some(empty_steps_rlp) = empty_steps_rlp {
 						fields.push(empty_steps_rlp);
 					}
@@ -1346,18 +1388,14 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		// Ensure header is from the step after parent.
 		if step == parent_step
 			|| (header.number() >= self.validate_step_transition && step <= parent_step) {
-			if self.should_produce_faulty_block(&header) {
+			if !self.should_produce_faulty_block(&header) {
 				trace!(target: "engine", "Multiple blocks proposed for step {}.", parent_step);
 				self.validators.report_malicious(header.author(), set_number, header.number(), Default::default());
 				Err(EngineError::DoubleVote(*header.author()))?;
 			}
 		}
 
-		if let Some(addr) = self.report_malicious.get(&header.number()) {
-			// TEST CODE: DO NOT MERGE INTO ANY PRODUCTION BRANCH!
-			warn!(target: "engine", "Reporting {} as malicious FOR TESTING PURPOSES.", addr);
-			self.validators.report_malicious(addr, set_number, header.number(), Default::default());
-		}
+		self.test_only_report_malicious(header, set_number);
 
 		// If empty step messages are enabled we will validate the messages in the seal, missing messages are not
 		// reported as there's no way to tell whether the empty step message was never sent or simply not included.
@@ -1675,6 +1713,10 @@ mod tests {
 			block_reward_contract: Default::default(),
 			strict_empty_steps_transition: 0,
 			randomness_contract_address: None,
+			#[cfg(test)]
+			report_malicious: Default::default(),
+			#[cfg(test)]
+			faulty_blocks_transition: Default::default(),
 		};
 
 		// mutate aura params
