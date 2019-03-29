@@ -47,6 +47,10 @@ build_rpc_trait! {
 		#[rpc(name = "parity_setEngineSigner")]
 		fn set_engine_signer(&self, H160, String) -> Result<bool>;
 
+		/// Unsets the engine signer account address.
+		#[rpc(name = "parity_clearEngineSigner")]
+		fn clear_engine_signer(&self) -> Result<bool>;
+
 		/// Sets the limits for transaction queue.
 		#[rpc(name = "parity_setTransactionsLimit")]
 		fn set_transactions_limit(&self, usize) -> Result<bool>;

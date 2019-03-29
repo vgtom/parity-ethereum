@@ -128,6 +128,11 @@ impl MinerService for TestMinerService {
 		Ok(())
 	}
 
+	fn clear_author(&self) -> Result<(), AccountError> {
+		*self.authoring_params.write() = Default::default();
+		Ok(())
+	}
+
 	fn set_extra_data(&self, extra_data: Bytes) {
 		self.authoring_params.write().extra_data = extra_data;
 	}
