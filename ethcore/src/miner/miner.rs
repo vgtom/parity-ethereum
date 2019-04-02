@@ -865,8 +865,10 @@ impl miner::MinerService for Miner {
 
 	fn clear_author(&self) -> Result<(), AccountError> {
 		self.params.write().author = Default::default();
-		self.sealing.lock().enabled = false;
-		self.engine.clear_signer();
+		if self.engine.seals_internally().is_some() {
+			self.sealing.lock().enabled = false;
+			self.engine.clear_signer();
+		}
 		Ok(())
 	}
 
