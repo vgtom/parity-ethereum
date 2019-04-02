@@ -131,6 +131,9 @@ pub trait MinerService : Send + Sync {
 	/// On PoW password is optional.
 	fn set_author(&self, address: Address, password: Option<Password>) -> Result<(), ::account_provider::SignError>;
 
+	/// Clears the engine signer and stops signing.
+	fn clear_author(&self) -> Result<(), ::account_provider::SignError>;
+
 	// Transaction Pool
 
 	/// Imports transactions to transaction queue.

@@ -694,6 +694,10 @@ impl Engine<EthereumMachine> for Tendermint {
 		self.to_step(Step::Propose);
 	}
 
+	fn clear_signer(&self) {
+		*self.signer.write() = Default::default();
+	}
+
 	fn sign(&self, hash: H256) -> Result<Signature, Error> {
 		Ok(self.signer.read().sign(hash)?)
 	}
