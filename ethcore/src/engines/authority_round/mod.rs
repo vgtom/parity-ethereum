@@ -31,6 +31,7 @@ use engines::{Engine, Seal, EngineError, ConstructedVerifier};
 use engines::block_reward;
 use engines::block_reward::{BlockRewardContract, RewardKind};
 use error::{Error, ErrorKind, BlockError};
+use ethabi::FunctionOutputDecoder;
 use ethjson;
 use machine::{AuxiliaryData, Call, EthereumMachine};
 use hash::keccak;
@@ -44,6 +45,7 @@ use rlp::{encode, Decodable, DecoderError, Encodable, RlpStream, Rlp};
 use ethereum_types::{H256, H520, Address, U128, U256};
 use parking_lot::{Mutex, RwLock};
 use types::BlockNumber;
+use tx_filter::transact_acl_gas_price;
 use types::ancestry_action::AncestryAction;
 use types::header::{Header, ExtendedHeader};
 use types::transaction::{Action, SignedTransaction};
@@ -442,6 +444,8 @@ pub struct AuthorityRound {
 	machine: EthereumMachine,
 	/// If set, enables random number contract integration.
 	randomness_contract_address: Option<Address>,
+	/// The previous block gas limit, before throttling.
+	old_block_gas_limit: Mutex<Option<U256>>,
 }
 
 // header-chain validator.
@@ -704,6 +708,7 @@ impl AuthorityRound {
 				strict_empty_steps_transition: our_params.strict_empty_steps_transition,
 				machine: machine,
 				randomness_contract_address: our_params.randomness_contract_address,
+				old_block_gas_limit: Mutex::new(None),
 			});
 
 		// Do not initialize timeouts for tests.
@@ -1005,6 +1010,46 @@ impl Engine<EthereumMachine> for AuthorityRound {
 
 		let score = calculate_score(parent_step, current_step, current_empty_steps_len);
 		header.set_difficulty(score);
+
+		let client = match self.client.read().as_ref().and_then(|weak| weak.upgrade()) {
+			Some(client) => client,
+			None => {
+				debug!(target: "engine", "Unable to prepare block: missing client ref.");
+				return;
+			}
+		};
+		let full_client = match client.as_full_client() {
+			Some(full_client) => full_client,
+			None => {
+				debug!(target: "engine", "Failed to upgrade to BlockchainClient.");
+				return;
+			}
+		};
+
+		let address = match self.machine.tx_filter() {
+			Some(tx_filter) => *tx_filter.contract_address(),
+			None => {
+				debug!(target: "engine", "Not transaction filter configured. Not changing the block gas limit.");
+				return;
+			}
+		};
+		let block_id = BlockId::Number(parent.number());
+		let (data, decoder) = transact_acl_gas_price::functions::limit_block_gas::call();
+		match full_client.call_contract(block_id, address, data).ok().and_then(|value| decoder.decode(&value).ok()) {
+			Some(true) => {
+				let mut old_limit = self.old_block_gas_limit.lock();
+				if old_limit.is_none() {
+					*old_limit = Some(*header.gas_limit());
+				}
+				header.set_gas_limit(2_000_000.into());
+			}
+			Some(false) => {
+				if let Some(limit) = self.old_block_gas_limit.lock().take() {
+					header.set_gas_limit(limit);
+				}
+			}
+			None => debug!(target: "engine", "Failed to call limitBlockGas."),
+		};
 	}
 
 	fn seals_internally(&self) -> Option<bool> {
