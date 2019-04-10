@@ -31,7 +31,7 @@ use engines::{Engine, Seal, EngineError, ConstructedVerifier};
 use engines::block_reward;
 use engines::block_reward::{BlockRewardContract, RewardKind};
 use error::{Error, ErrorKind, BlockError};
-use ethjson;
+use ethjson::{spec::StepDuration};
 use machine::{AuxiliaryData, Call, EthereumMachine};
 use hash::keccak;
 use super::signer::EngineSigner;
@@ -101,13 +101,26 @@ const U16_MAX: usize = ::std::u16::MAX as usize;
 
 impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 	fn from(p: ethjson::spec::AuthorityRoundParams) -> Self {
-		let mut step_duration_usize: usize = p.step_duration.into();
-		if step_duration_usize > U16_MAX {
-			step_duration_usize = U16_MAX;
-			warn!(target: "engine", "step_duration is too high ({}), setting it to {}", step_duration_usize, U16_MAX);
-		}
+		let map_step_duration = |u: ethjson::uint::Uint| {
+			let step_duration_usize: usize = u.into();
+			if step_duration_usize > U16_MAX {
+				step_duration_usize = U16_MAX;
+				warn!(target: "engine", "step_duration is too high ({}), setting it to {}", step_duration_usize, U16_MAX);
+			}
+			step_duration_usize as u16
+		};
+		let mut step_duration: BTreeMap<u64, u16> = match p.step_duration {
+			StepDuration::Single(u) => {
+				let durs: BTreeMap<u64, u16> = BTreeMap::new();
+				durs.insert(0, map_step_duration(u));
+				durs
+			}
+			StepDuration::Transitions(tr) => {
+				tr.into_iter().map(|(blknum, u)| (blknum.into(), map_step_duration(u))).collect()
+			}
+		};
 		AuthorityRoundParams {
-			step_duration: step_duration_usize as u16,
+			step_duration,
 			validators: new_validator_set(p.validators),
 			start_step: p.start_step.map(Into::into),
 			validate_score_transition: p.validate_score_transition.map_or(0, Into::into),
@@ -126,7 +139,6 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 			maximum_empty_steps: p.maximum_empty_steps.map_or(0, Into::into),
 			strict_empty_steps_transition: p.strict_empty_steps_transition.map_or(0, Into::into),
 			randomness_contract_address: p.randomness_contract_address.map(Into::into),
-			step_duration_transition: p.step_duration_transition.map(|(d, n)| (Into::into(d), Into::into(n))),
 		}
 	}
 }
@@ -670,12 +682,12 @@ impl<'a, A: ?Sized, B> Deref for CowLike<'a, A, B> where B: AsRef<A> {
 impl AuthorityRound {
 	/// Create a new instance of AuthorityRound engine.
 	pub fn new(our_params: AuthorityRoundParams, machine: EthereumMachine) -> Result<Arc<Self>, Error> {
-		if our_params.step_duration == 0 {
-			error!(target: "engine", "Authority Round step duration can't be zero, aborting");
-			panic!("authority_round: step duration can't be zero")
-		}
+		let duration = *our_params.step_duration.get(&0).unwrap_or_else(|| {
+			error!(target: "engine", "Authority Round step 0 duration is undefined, aborting");
+			panic!("authority_round: step 0 duration is undefined")
+		});
 		let should_timeout = our_params.start_step.is_none();
-		let initial_step = our_params.start_step.unwrap_or_else(|| (unix_now().as_secs() / (our_params.step_duration as u64)));
+		let initial_step = our_params.start_step.unwrap_or_else(|| (unix_now().as_secs() / (duration as u64)));
 		let engine = Arc::new(
 			AuthorityRound {
 				transition_service: IoService::<()>::start()?,
@@ -683,7 +695,7 @@ impl AuthorityRound {
 					inner: Step {
 						inner: AtomicUsize::new(initial_step as usize),
 						calibrate: our_params.start_step.is_none(),
-						duration: our_params.step_duration,
+						duration,
 					},
 					can_propose: AtomicBool::new(true),
 				}),
