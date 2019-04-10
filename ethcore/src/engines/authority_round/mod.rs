@@ -66,7 +66,7 @@ pub struct AuthorityRoundParams {
 	///
 	/// Deliberately typed as u16 as too high of a value leads
 	/// to slow block issuance.
-	pub step_duration: u16,
+	pub step_duration: BTreeMap<u64, u16>,
 	/// Starting step,
 	pub start_step: Option<u64>,
 	/// Valid validators.
@@ -126,6 +126,7 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 			maximum_empty_steps: p.maximum_empty_steps.map_or(0, Into::into),
 			strict_empty_steps_transition: p.strict_empty_steps_transition.map_or(0, Into::into),
 			randomness_contract_address: p.randomness_contract_address.map(Into::into),
+			step_duration_transition: p.step_duration_transition.map(|(d, n)| (Into::into(d), Into::into(n))),
 		}
 	}
 }
