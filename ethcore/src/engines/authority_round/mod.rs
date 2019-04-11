@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::{cmp, fmt};
 use std::iter::FromIterator;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicU16, AtomicUsize, AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Weak, Arc};
 use std::time::{UNIX_EPOCH, SystemTime, Duration};
 
@@ -61,11 +61,12 @@ pub type RandomnessPhaseError = randomness::PhaseError;
 
 /// `AuthorityRound` params.
 pub struct AuthorityRoundParams {
-	/// Time to wait before next block or authority switching,
-	/// in seconds.
+	/// A map defining intervals of blocks with the given times (in seconds) to wait before next
+	/// block or authority switching. The keys in the map are numbers of starting blocks of those
+	/// periods.
 	///
-	/// Deliberately typed as u16 as too high of a value leads
-	/// to slow block issuance.
+	/// Wait times (durations) are deliberately typed as `u16` since larger values lead to slow
+	/// block issuance.
 	pub step_duration: BTreeMap<u64, u16>,
 	/// Starting step,
 	pub start_step: Option<u64>,
@@ -102,16 +103,16 @@ const U16_MAX: usize = ::std::u16::MAX as usize;
 impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 	fn from(p: ethjson::spec::AuthorityRoundParams) -> Self {
 		let map_step_duration = |u: ethjson::uint::Uint| {
-			let step_duration_usize: usize = u.into();
+			let mut step_duration_usize: usize = u.into();
 			if step_duration_usize > U16_MAX {
 				step_duration_usize = U16_MAX;
 				warn!(target: "engine", "step_duration is too high ({}), setting it to {}", step_duration_usize, U16_MAX);
 			}
 			step_duration_usize as u16
 		};
-		let mut step_duration: BTreeMap<u64, u16> = match p.step_duration {
+		let step_duration: BTreeMap<u64, u16> = match p.step_duration {
 			StepDuration::Single(u) => {
-				let durs: BTreeMap<u64, u16> = BTreeMap::new();
+				let mut durs: BTreeMap<u64, u16> = BTreeMap::new();
 				durs.insert(0, map_step_duration(u));
 				durs
 			}
@@ -143,12 +144,15 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 	}
 }
 
-// Helper for managing the step.
+/// Helper for managing the step.
 #[derive(Debug)]
 struct Step {
 	calibrate: bool, // whether calibration is enabled.
 	inner: AtomicUsize,
-	duration: u16,
+	/// Duration of this step.
+	duration: AtomicU16,
+	/// Duration of the next step.
+	next_duration: AtomicU16,
 }
 
 impl Step {
@@ -157,7 +161,7 @@ impl Step {
 		let now = unix_now();
 		let expected_seconds = self.load()
 			.checked_add(1)
-			.and_then(|ctr| ctr.checked_mul(self.duration as u64))
+			.and_then(|ctr| ctr.checked_mul(self.duration.load(AtomicOrdering::SeqCst) as u64))
 			.map(Duration::from_secs);
 
 		match expected_seconds {
@@ -169,9 +173,9 @@ impl Step {
 				panic!("step counter is too high: {}", ctr)
 			},
 		}
-
 	}
 
+	/// Increment the step and set the duration of the new step.
 	fn increment(&self) {
 		use std::usize;
 		// fetch_add won't panic on overflow but will rather wrap
@@ -181,12 +185,12 @@ impl Step {
 			error!(target: "engine", "Step counter is too high: {}, aborting", usize::MAX);
 			panic!("step counter is too high: {}", usize::MAX);
 		}
-
+		self.duration.store(self.next_duration.load(AtomicOrdering::SeqCst), AtomicOrdering::SeqCst);
 	}
 
 	fn calibrate(&self) {
 		if self.calibrate {
-			let new_step = unix_now().as_secs() / (self.duration as u64);
+			let new_step = unix_now().as_secs() / (self.duration.load(AtomicOrdering::SeqCst) as u64);
 			self.inner.store(new_step as usize, AtomicOrdering::SeqCst);
 		}
 	}
@@ -208,7 +212,7 @@ impl Step {
 			Err(None)
 		// wait a bit for blocks in near future
 		} else if given > current {
-			let d = self.duration as u64;
+			let d = self.duration.load(AtomicOrdering::SeqCst) as u64;
 			Err(Some(OutOfBounds {
 				min: None,
 				max: Some(d * current),
@@ -455,6 +459,9 @@ pub struct AuthorityRound {
 	machine: EthereumMachine,
 	/// If set, enables random number contract integration.
 	randomness_contract_address: Option<Address>,
+	/// The correspondence between block numbers and step durations. The entry at 0 should be
+	/// defined.
+	step_duration: BTreeMap<u64, u16>,
 }
 
 // header-chain validator.
@@ -695,7 +702,8 @@ impl AuthorityRound {
 					inner: Step {
 						inner: AtomicUsize::new(initial_step as usize),
 						calibrate: our_params.start_step.is_none(),
-						duration,
+						duration: AtomicU16::new(duration),
+						next_duration: AtomicU16::new(duration),
 					},
 					can_propose: AtomicBool::new(true),
 				}),
@@ -717,6 +725,7 @@ impl AuthorityRound {
 				strict_empty_steps_transition: our_params.strict_empty_steps_transition,
 				machine: machine,
 				randomness_contract_address: our_params.randomness_contract_address,
+				step_duration: our_params.step_duration,
 			});
 
 		// Do not initialize timeouts for tests.
@@ -1239,6 +1248,11 @@ impl Engine<EthereumMachine> for AuthorityRound {
 			},
 		};
 
+		if let Some(dur) = self.step_duration.get(&(block.header().number() + 1)) {
+			// Schedule a step duration change at the next engine step.
+			self.step.inner.next_duration.store(*dur, AtomicOrdering::SeqCst);
+		}
+
 		block_reward::apply_block_rewards(&rewards, block, &self.machine)
 	}
 
@@ -1654,7 +1668,7 @@ mod tests {
 		F: FnOnce(&mut AuthorityRoundParams),
 	{
 		let mut params = AuthorityRoundParams {
-			step_duration: 1,
+			step_duration: [(0, 1)].to_vec().into_iter().collect(),
 			start_step: Some(1),
 			validators: Box::new(TestSet::default()),
 			validate_score_transition: 0,
@@ -1954,10 +1968,13 @@ mod tests {
 	#[should_panic(expected="counter is too high")]
 	fn test_counter_increment_too_high() {
 		use super::Step;
+		use std::sync::atomic::AtomicU16;
+
 		let step = Step {
 			calibrate: false,
 			inner: AtomicUsize::new(::std::usize::MAX),
-			duration: 1,
+			duration: AtomicU16::new(1),
+			next_duration: AtomicU16::new(1),
 		};
 		step.increment();
 	}
@@ -1978,7 +1995,7 @@ mod tests {
 	#[should_panic(expected="authority_round: step duration can't be zero")]
 	fn test_step_duration_zero() {
 		aura(|params| {
-			params.step_duration = 0;
+			params.step_duration = [(0, 0)].to_vec().into_iter().collect();;
 		});
 	}
 
@@ -2370,7 +2387,7 @@ mod tests {
 	#[test]
 	fn test_empty_steps() {
 		let engine = aura(|p| {
-			p.step_duration = 4;
+			p.step_duration = [(0, 4)].to_vec().into_iter().collect();
 			p.empty_steps_transition = 0;
 			p.maximum_empty_steps = 0;
 		});
@@ -2404,7 +2421,7 @@ mod tests {
 		let (_spec, tap, accounts) = setup_empty_steps();
 		let engine = aura(|p| {
 			p.validators = Box::new(SimpleList::new(accounts.clone()));
-			p.step_duration = 4;
+			p.step_duration = [(0, 4)].to_vec().into_iter().collect();
 			p.empty_steps_transition = 0;
 			p.maximum_empty_steps = 0;
 		});
@@ -2441,7 +2458,7 @@ mod tests {
 		let (_spec, tap, accounts) = setup_empty_steps();
 		let engine = aura(|p| {
 			p.validators = Box::new(SimpleList::new(accounts.clone()));
-			p.step_duration = 4;
+			p.step_duration = [(0, 4)].to_vec().into_iter().collect();
 			p.empty_steps_transition = 0;
 			p.maximum_empty_steps = 0;
 		});

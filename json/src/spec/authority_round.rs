@@ -69,9 +69,6 @@ pub struct AuthorityRoundParams {
 	/// Stake (PoS) consensus.  Otherwise, use Proof of Authority (PoA)
 	/// consensus.
 	pub randomness_contract_address: Option<Address>,
-	/// Optional instructions to change the block duration starting from a particular block given
-	/// as a pair `(duration, block_number)`.
-	pub step_duration_transition: Option<(Uint, Uint)>
 }
 
 /// Authority engine deserialization.
