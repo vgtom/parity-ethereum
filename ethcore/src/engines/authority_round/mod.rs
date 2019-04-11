@@ -1983,10 +1983,13 @@ mod tests {
 	#[should_panic(expected="counter is too high")]
 	fn test_counter_duration_remaining_too_high() {
 		use super::Step;
+		use std::sync::atomic::AtomicU16;
+
 		let step = Step {
 			calibrate: false,
 			inner: AtomicUsize::new(::std::usize::MAX),
-			duration: 1,
+			duration: AtomicU16::new(1),
+			next_duration: AtomicU16::new(1),
 		};
 		step.duration_remaining();
 	}
