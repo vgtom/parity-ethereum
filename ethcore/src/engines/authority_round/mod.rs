@@ -2001,7 +2001,7 @@ mod tests {
 	}
 
 	#[test]
-	#[should_panic(expected="authority_round: step duration can't be zero")]
+	#[should_panic(expected="authority_round: step duration cannot be 0")]
 	fn test_step_duration_zero() {
 		aura(|params| {
 			params.step_duration = [(0, 0)].to_vec().into_iter().collect();;
