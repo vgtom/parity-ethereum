@@ -154,8 +154,6 @@ struct Step {
 	inner: AtomicUsize,
 	/// Duration of this step.
 	duration: AtomicU16,
-	/// Duration of the next step.
-	next_duration: AtomicU16,
 }
 
 impl Step {
@@ -178,7 +176,9 @@ impl Step {
 		}
 	}
 
-	/// Increment the step and set the duration of the new step.
+	/// Increments the step number.
+	///
+	/// Panics if the new step number is `usize::MAX`.
 	fn increment(&self) {
 		use std::usize;
 		// fetch_add won't panic on overflow but will rather wrap
@@ -188,7 +188,6 @@ impl Step {
 			error!(target: "engine", "Step counter is too high: {}, aborting", usize::MAX);
 			panic!("step counter is too high: {}", usize::MAX);
 		}
-		self.duration.store(self.next_duration.load(AtomicOrdering::SeqCst), AtomicOrdering::SeqCst);
 	}
 
 	fn calibrate(&self) {
@@ -709,7 +708,6 @@ impl AuthorityRound {
 						inner: AtomicUsize::new(initial_step as usize),
 						calibrate: our_params.start_step.is_none(),
 						duration: AtomicU16::new(duration),
-						next_duration: AtomicU16::new(duration),
 					},
 					can_propose: AtomicBool::new(true),
 				}),
@@ -1254,11 +1252,6 @@ impl Engine<EthereumMachine> for AuthorityRound {
 			},
 		};
 
-		if let Some(dur) = self.step_duration.get(&(block.header().number() + 1)) {
-			// Schedule a step duration change at the next engine step.
-			self.step.inner.next_duration.store(*dur, AtomicOrdering::SeqCst);
-		}
-
 		block_reward::apply_block_rewards(&rewards, block, &self.machine)
 	}
 
@@ -1267,7 +1260,14 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		// Genesis is never a new block, but might as well check.
 		let header = block.header().clone();
 		let first = header.number() == 0;
-
+		if let Some((_, dur)) = self.step_duration.range(0..=header.number()).last() {
+			// Change the duration of this engine step.
+			self.step.inner.duration.store(*dur, AtomicOrdering::SeqCst);
+		} else {
+			warn!(target: "engine", "Cannot find duration for block {}; leaving it unchanged",
+				  header.number());
+		}
+		let our_addr = self.signer.read().address().ok_or_else(|| EngineError::NotAuthorized(*header.author()))?;
 		let client = self.client.read().as_ref().and_then(|weak| weak.upgrade()).ok_or_else(|| {
 			debug!(target: "engine", "Unable to prepare block: missing client ref.");
 			EngineError::RequiresClient
@@ -1980,7 +1980,6 @@ mod tests {
 			calibrate: false,
 			inner: AtomicUsize::new(::std::usize::MAX),
 			duration: AtomicU16::new(1),
-			next_duration: AtomicU16::new(1),
 		};
 		step.increment();
 	}
@@ -1995,7 +1994,6 @@ mod tests {
 			calibrate: false,
 			inner: AtomicUsize::new(::std::usize::MAX),
 			duration: AtomicU16::new(1),
-			next_duration: AtomicU16::new(1),
 		};
 		step.duration_remaining();
 	}
