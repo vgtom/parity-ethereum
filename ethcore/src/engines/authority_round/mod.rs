@@ -105,7 +105,7 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 		let map_step_duration = |u: ethjson::uint::Uint| {
 			let mut step_duration_usize: usize = u.into();
 			if step_duration_usize == 0 {
-				panic!("step duration cannot be 0");
+				panic!("AuthorityRoundParams: step duration cannot be 0");
 			}
 			if step_duration_usize > U16_MAX {
 				step_duration_usize = U16_MAX;
@@ -696,6 +696,9 @@ impl AuthorityRound {
 			error!(target: "engine", "Authority Round step 0 duration is undefined, aborting");
 			panic!("authority_round: step 0 duration is undefined")
 		});
+		if our_params.step_duration.values().any(|v| *v == 0) {
+			panic!("authority_round: step duration cannot be 0");
+		}
 		let should_timeout = our_params.start_step.is_none();
 		let initial_step = our_params.start_step.unwrap_or_else(|| (unix_now().as_secs() / (duration as u64)));
 		let engine = Arc::new(
