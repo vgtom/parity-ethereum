@@ -104,9 +104,12 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 	fn from(p: ethjson::spec::AuthorityRoundParams) -> Self {
 		let map_step_duration = |u: ethjson::uint::Uint| {
 			let mut step_duration_usize: usize = u.into();
+			if step_duration_usize == 0 {
+				panic!("step duration cannot be 0");
+			}
 			if step_duration_usize > U16_MAX {
 				step_duration_usize = U16_MAX;
-				warn!(target: "engine", "step_duration is too high ({}), setting it to {}", step_duration_usize, U16_MAX);
+				warn!(target: "engine", "step duration is too high ({}), setting it to {}", step_duration_usize, U16_MAX);
 			}
 			step_duration_usize as u16
 		};
