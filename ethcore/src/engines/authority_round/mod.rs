@@ -1260,6 +1260,11 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		// Genesis is never a new block, but might as well check.
 		let header = block.header().clone();
 		let first = header.number() == 0;
+		let opt_signer = self.signer.read();
+		let signer = match opt_signer.as_ref() {
+			Some(signer) => signer,
+			None => return Ok(Vec::new()), // We are not a validator, so we shouldn't call the contracts.
+		};
 		if let Some((_, dur)) = self.step_duration.range(0..=header.number()).last() {
 			// Change the duration of this engine step.
 			self.step.inner.duration.store(*dur, AtomicOrdering::SeqCst);
@@ -1267,7 +1272,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 			warn!(target: "engine", "Cannot find duration for block {}; leaving it unchanged",
 				  header.number());
 		}
-		let our_addr = self.signer.read().address().ok_or_else(|| EngineError::NotAuthorized(*header.author()))?;
+		let our_addr = signer.address();
 		let client = self.client.read().as_ref().and_then(|weak| weak.upgrade()).ok_or_else(|| {
 			debug!(target: "engine", "Unable to prepare block: missing client ref.");
 			EngineError::RequiresClient
@@ -1280,14 +1285,8 @@ impl Engine<EthereumMachine> for AuthorityRound {
 			full_client.call_contract(BlockId::Latest, to, data).map_err(|e| format!("{}", e))
 		};
 
-		let opt_signer = self.signer.read();
-		let signer = match opt_signer.as_ref() {
-			Some(signer) => signer,
-			None => return Ok(Vec::new()), // We are not a validator, so we shouldn't call the contracts.
-		};
-
 		// Our current account nonce. The transactions must have consecutive nonces, starting with this one.
-		let mut tx_nonce = block.state.nonce(&signer.address())?;
+		let mut tx_nonce = block.state.nonce(&our_addr)?;
 		let mut transactions = Vec::new();
 
 		// Creates and signs a transaction with the given contract call.
