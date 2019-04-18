@@ -915,6 +915,19 @@ impl AuthorityRound {
 		let finalized = epoch_manager.finality_checker.push_hash(chain_head.hash(), vec![*chain_head.author()]);
 		finalized.unwrap_or_default()
 	}
+
+	/// Updates the duration of the step `block_number`.
+	fn update_step_duration(&self, block_number: u64) {
+		if let Some((_, dur)) = self.step_duration.range(0 ..= block_number).last() {
+			// Change the duration of the next engine step.
+			trace!(target: "engine", "Changing the duration of the step of the block #{} to {} seconds",
+				   block_number, dur);
+			self.step.inner.duration.store(*dur, AtomicOrdering::SeqCst);
+		} else {
+			warn!(target: "engine", "Cannot find duration for block #{}; leaving it unchanged",
+				  block_number);
+		}
+	}
 }
 
 fn unix_now() -> Duration {
@@ -1205,8 +1218,9 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		self.validators.on_epoch_begin(first, &header, &mut call)
 	}
 
-	/// Apply the block reward on finalisation of the block.
+	/// Change the next step duration if necessary and apply the block reward on finalisation of the block.
 	fn on_close_block(&self, block: &mut ExecutedBlock) -> Result<(), Error> {
+		self.update_step_duration(block.header().number() + 1);
 		let mut beneficiaries = Vec::new();
 		if block.header().number() >= self.empty_steps_transition {
 			let empty_steps = if block.header().seal().is_empty() {
@@ -1265,13 +1279,6 @@ impl Engine<EthereumMachine> for AuthorityRound {
 			Some(signer) => signer,
 			None => return Ok(Vec::new()), // We are not a validator, so we shouldn't call the contracts.
 		};
-		if let Some((_, dur)) = self.step_duration.range(0..=header.number()).last() {
-			// Change the duration of this engine step.
-			self.step.inner.duration.store(*dur, AtomicOrdering::SeqCst);
-		} else {
-			warn!(target: "engine", "Cannot find duration for block {}; leaving it unchanged",
-				  header.number());
-		}
 		let our_addr = signer.address();
 		let client = self.client.read().as_ref().and_then(|weak| weak.upgrade()).ok_or_else(|| {
 			debug!(target: "engine", "Unable to prepare block: missing client ref.");
@@ -1300,7 +1307,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		if let Some(contract_addr) = self.randomness_contract_address {
 			let mut contract = util::BoundContract::bind(&*client, BlockId::Latest, contract_addr);
 			// TODO: How should these errors be handled?
-			let phase = randomness::RandomnessPhase::load(&contract, signer.address())
+			let phase = randomness::RandomnessPhase::load(&contract, our_addr)
 				.map_err(EngineError::RandomnessLoadError)?;
 			let mut rng = ::rand::OsRng::new()?;
 			if let Some(data) = phase.advance(&contract, &mut rng, signer.as_ref())
