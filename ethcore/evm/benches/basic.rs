@@ -33,19 +33,20 @@ use criterion::{Criterion, Bencher, black_box};
 use std::str::FromStr;
 use std::sync::Arc;
 use ethereum_types::{U256, Address};
-use vm::{ActionParams, Result, GasLeft, Ext};
+use vm::{ActionParams, Result, GasLeft, Ext, Schedule};
 use vm::tests::FakeExt;
-use evm::Factory;
+use evm::{Factory, Instruction, interpreter::{Interpreter, SharedCache}};
 use rustc_hex::FromHex;
 
 criterion_group!(
 	basic,
+	mulmod,
 	simple_loop_log0_usize,
 	simple_loop_log0_u256,
 	mem_gas_calculation_same_usize,
 	mem_gas_calculation_same_u256,
 	mem_gas_calculation_increasing_usize,
-	mem_gas_calculation_increasing_u256
+	mem_gas_calculation_increasing_u256,
 );
 criterion_main!(basic);
 
@@ -156,4 +157,28 @@ fn result(r: Result<evm::GasLeft>) -> U256 {
 		Ok(GasLeft::NeedsReturn { gas_left,  .. }) => gas_left,
 		_ => U256::zero(),
 	}
+}
+
+fn mulmod(b: &mut Criterion) {
+	// A dummy interpreter initialised with dummy parameters.
+	b.bench_function("mulmod", |b| {
+		let mut stack: Vec<U256> = Vec::new();
+		stack.push(U256::MAX);     // a
+		stack.push(U256::MAX);     // b
+		stack.push(U256::from(1)); // c
+		let mut params = ActionParams::default();
+		params.code = Some(Arc::new("deadbeef".from_hex().unwrap()));
+		let schedule = Schedule::new_constantinople();
+		let mut interpreter = Interpreter::<U256>::new_with_stack(
+			params,
+			Arc::new(SharedCache::new(1024)),
+			&schedule,
+			512,
+			stack.as_slice(),
+		);
+		let mut ext = FakeExt::new();
+		b.iter(|| {
+			interpreter.exec_instruction(U256::from(1), &mut ext, Instruction::MULMOD, None);
+		});
+	});
 }

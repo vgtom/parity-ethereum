@@ -29,7 +29,7 @@ use std::sync::Arc;
 use hash::keccak;
 use bytes::Bytes;
 use ethereum_types::{U256, U512, H256, Address};
-
+use rug::{Integer, integer::Order};
 use vm::{
 	self, ActionParams, ParamsType, ActionValue, CallType, MessageCallResult,
 	ContractCreateResult, CreateContractAddress, ReturnData, GasLeft, Schedule,
@@ -89,7 +89,7 @@ impl CodeReader {
 	}
 }
 
-enum InstructionResult<Gas> {
+pub enum InstructionResult<Gas> {
 	Ok,
 	UnusedGas(Gas),
 	JumpToPosition(U256),
@@ -292,6 +292,26 @@ impl<Cost: CostType> Interpreter<Cost> {
 		}
 	}
 
+	pub fn new_with_stack(
+		mut params: ActionParams,
+		cache: Arc<SharedCache>,
+		schedule: &Schedule,
+		depth: usize,
+		stack: &[U256],
+	) -> Interpreter<Cost> {
+		let mut interpreter = Interpreter::new(params, cache, schedule, depth);
+		let stack_limit = schedule.stack_limit;
+		let mut pointer = 0;
+		for v in stack {
+			interpreter.stack.push(v.clone());
+			pointer += 1;
+			if pointer > stack_limit {
+				break;
+			}
+		}
+		interpreter
+	}
+
 	/// Execute a single step on the VM.
 	#[inline(always)]
 	pub fn step(&mut self, ext: &mut vm::Ext) -> InterpreterResult {
@@ -476,7 +496,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 		}
 	}
 
-	fn exec_instruction(
+	pub fn exec_instruction(
 		&mut self,
 		gas: Cost,
 		ext: &mut vm::Ext,
@@ -1023,11 +1043,15 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let b = self.stack.pop_back();
 				let c = self.stack.pop_back();
 
-				self.stack.push(if !c.is_zero() {
-					let a5 = U512::from(a);
-					let res = a5.overflowing_mul(U512::from(b)).0;
-					let x = res % U512::from(c);
-					U256::from(x)
+				self.stack.push(if !a.is_zero() && !b.is_zero() && !c.is_zero() {
+					let U256(a_u64s) = a;
+					let U256(b_u64s) = b;
+					let U256(c_u64s) = c;
+					let a0 = Integer::from_digits(&a_u64s, Order::MsfLe);
+					let b0 = Integer::from_digits(&b_u64s, Order::MsfLe);
+					let c0 = Integer::from_digits(&c_u64s, Order::MsfLe);
+					let d0 = (a0 * b0) % c0;
+					U256::from_little_endian(d0.to_digits::<u8>(Order::MsfLe).as_slice())
 				} else {
 					U256::zero()
 				});
@@ -1230,5 +1254,10 @@ mod tests {
 		};
 
 		assert_eq!(err, ::vm::Error::OutOfBounds);
+	}
+
+	#[test]
+	fn should_compute_mulmod() {
+		// FIXME
 	}
 }
