@@ -89,7 +89,7 @@ impl CodeReader {
 	}
 }
 
-pub enum InstructionResult<Gas> {
+enum InstructionResult<Gas> {
 	Ok,
 	UnusedGas(Gas),
 	JumpToPosition(U256),
@@ -292,26 +292,6 @@ impl<Cost: CostType> Interpreter<Cost> {
 		}
 	}
 
-	pub fn new_with_stack(
-		mut params: ActionParams,
-		cache: Arc<SharedCache>,
-		schedule: &Schedule,
-		depth: usize,
-		stack: &[U256],
-	) -> Interpreter<Cost> {
-		let mut interpreter = Interpreter::new(params, cache, schedule, depth);
-		let stack_limit = schedule.stack_limit;
-		let mut pointer = 0;
-		for v in stack {
-			interpreter.stack.push(v.clone());
-			pointer += 1;
-			if pointer > stack_limit {
-				break;
-			}
-		}
-		interpreter
-	}
-
 	/// Execute a single step on the VM.
 	#[inline(always)]
 	pub fn step(&mut self, ext: &mut vm::Ext) -> InterpreterResult {
@@ -496,7 +476,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 		}
 	}
 
-	pub fn exec_instruction(
+	fn exec_instruction(
 		&mut self,
 		gas: Cost,
 		ext: &mut vm::Ext,
@@ -1258,6 +1238,20 @@ mod tests {
 
 	#[test]
 	fn should_compute_mulmod() {
-		// FIXME
+		let code = "6101f45b6001900360017fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80095080600357".from_hex().unwrap();
+		let mut params = ActionParams::default();
+		params.address = 5.into();
+		params.gas = 300_000.into();
+		params.gas_price = 1.into();
+		params.code = Some(Arc::new(code));
+		let mut ext = FakeExt::new();
+		ext.balances.insert(5.into(), 1_000_000_000.into());
+		ext.tracing = true;
+		let gas_left = {
+			let mut vm = interpreter(params, &ext);
+			test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
+		};
+		assert_eq!(ext.calls.len(), 0);
+		assert_eq!(gas_left, 277_497.into());
 	}
 }
