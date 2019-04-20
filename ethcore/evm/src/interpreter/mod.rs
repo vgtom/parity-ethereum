@@ -1027,11 +1027,11 @@ impl<Cost: CostType> Interpreter<Cost> {
 					let U256(a_u64s) = a;
 					let U256(b_u64s) = b;
 					let U256(c_u64s) = c;
-					let a0 = Integer::from_digits(&a_u64s, Order::MsfLe);
-					let b0 = Integer::from_digits(&b_u64s, Order::MsfLe);
-					let c0 = Integer::from_digits(&c_u64s, Order::MsfLe);
-					let d0 = (a0 * b0) % c0;
-					U256::from_little_endian(d0.to_digits::<u8>(Order::MsfLe).as_slice())
+					let a0 = Integer::from_digits(&a_u64s, Order::LsfLe);
+					let b0 = Integer::from_digits(&b_u64s, Order::LsfLe);
+					let c0 = Integer::from_digits(&c_u64s, Order::LsfLe);
+					let d0 = (a0.clone() * b0.clone()) % c0.clone();
+					U256::from_little_endian(d0.to_digits::<u8>(Order::LsfLe).as_slice())
 				} else {
 					U256::zero()
 				});
@@ -1160,7 +1160,6 @@ fn get_and_reset_sign(value: U256) -> (U256, bool) {
 	let sign = arr[3].leading_zeros() == 0;
 	(set_sign(value, sign), sign)
 }
-
 fn set_sign(value: U256, sign: bool) -> U256 {
 	if sign {
 		(!U256::zero() ^ value).overflowing_add(U256::one()).0
@@ -1236,9 +1235,21 @@ mod tests {
 		assert_eq!(err, ::vm::Error::OutOfBounds);
 	}
 
+	// Source:
+	//
+	// PUSH32 0x5ed6db9489224124a1a4110ec8bec8b01369c8b549a4b8c4388a1796dc35a937
+	// PUSH32 0xb8e0a2b6b1587398c28bf9e9d34ea24ba34df308eec2acedca363b2fce2c25db
+	// PUSH32 0xcc2de1f8ec6cc9a24ed2c48b856637f9e45f0a5feee21a196aa42a290ef454ca
+	// MULMOD
+	// PUSH32 0x1a1aa0d67ab8bfd1d3f4d0f4427cb12137ee1b8fb30ef5bf8a3a625435cdd41f
+	// EQ
+	// PUSH1 0x8a
+	// JUMPI
+	// INVALID
+	// JUMPDEST
 	#[test]
-	fn should_compute_mulmod() {
-		let code = "6101f45b6001900360017fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80095080600357".from_hex().unwrap();
+	fn should_compute_mulmod_and_check() {
+		let code = "7f5ed6db9489224124a1a4110ec8bec8b01369c8b549a4b8c4388a1796dc35a9377fb8e0a2b6b1587398c28bf9e9d34ea24ba34df308eec2acedca363b2fce2c25db7fcc2de1f8ec6cc9a24ed2c48b856637f9e45f0a5feee21a196aa42a290ef454ca097f1a1aa0d67ab8bfd1d3f4d0f4427cb12137ee1b8fb30ef5bf8a3a625435cdd41f14608a57fe5b".from_hex().unwrap();
 		let mut params = ActionParams::default();
 		params.address = 5.into();
 		params.gas = 300_000.into();
@@ -1252,6 +1263,6 @@ mod tests {
 			test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 		};
 		assert_eq!(ext.calls.len(), 0);
-		assert_eq!(gas_left, 277_497.into());
+		assert_eq!(gas_left, 299_963.into());
 	}
 }

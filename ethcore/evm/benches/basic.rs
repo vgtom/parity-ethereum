@@ -41,6 +41,7 @@ use rustc_hex::FromHex;
 criterion_group!(
 	basic,
 	mulmod500,
+	mulmod1000,
 	simple_loop_log0_usize,
 	simple_loop_log0_u256,
 	mem_gas_calculation_same_usize,
@@ -168,6 +169,26 @@ fn mulmod500(b: &mut Criterion) {
 		b.iter(|| {
 			let code = black_box(
 				"6101f45b6001900360017fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80095080600357".from_hex().unwrap()
+			);
+			let mut params = ActionParams::default();
+			params.address = address.clone();
+			params.gas = U256::MAX;
+			params.code = Some(Arc::new(code.clone()));
+			let vm = factory.create(params, ext.schedule(), 0);
+			result(vm.exec(&mut ext).ok().unwrap())
+		});
+	});
+}
+
+/// Compute mulmod(U256::MAX, U256::MAX, 1) 1000 times.
+fn mulmod1000(b: &mut Criterion) {
+	b.bench_function("mulmod 1000 times", |b| {
+		let factory = Factory::default();
+		let mut ext = FakeExt::new();
+		let address = Address::from_str("0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6").unwrap();
+		b.iter(|| {
+			let code = black_box(
+				"6103e85b6001900360017fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80095080600357".from_hex().unwrap()
 			);
 			let mut params = ActionParams::default();
 			params.address = address.clone();
