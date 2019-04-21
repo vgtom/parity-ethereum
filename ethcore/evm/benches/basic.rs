@@ -40,6 +40,7 @@ use rustc_hex::FromHex;
 
 criterion_group!(
 	basic,
+	mulmod,
 	mulmod500,
 	mulmod1000,
 	simple_loop_log0_usize,
@@ -189,6 +190,25 @@ fn mulmod1000(b: &mut Criterion) {
 		b.iter(|| {
 			let code = black_box(
 				"6103e85b6001900360017fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80095080600357".from_hex().unwrap()
+			);
+			let mut params = ActionParams::default();
+			params.address = address.clone();
+			params.gas = U256::MAX;
+			params.code = Some(Arc::new(code.clone()));
+			let vm = factory.create(params, ext.schedule(), 0);
+			result(vm.exec(&mut ext).ok().unwrap())
+		});
+	});
+}
+
+/// Compute mulmod(a, b, c) for random 256-bit a, b and c.
+fn mulmod(b: &mut Criterion) {
+	b.bench_function("mulmod randomly generated ints", |b| {
+		let factory = Factory::default();
+		let mut ext = FakeExt::new();
+		let address = Address::from_str("0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6").unwrap();
+		b.iter(|| {
+			let code = black_box("7f5ed6db9489224124a1a4110ec8bec8b01369c8b549a4b8c4388a1796dc35a9377fb8e0a2b6b1587398c28bf9e9d34ea24ba34df308eec2acedca363b2fce2c25db7fcc2de1f8ec6cc9a24ed2c48b856637f9e45f0a5feee21a196aa42a290ef454ca097f1a1aa0d67ab8bfd1d3f4d0f4427cb12137ee1b8fb30ef5bf8a3a625435cdd41f14608a57fe5b".from_hex().unwrap()
 			);
 			let mut params = ActionParams::default();
 			params.address = address.clone();
