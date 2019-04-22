@@ -28,7 +28,7 @@ use std::{cmp, mem};
 use std::sync::Arc;
 use hash::keccak;
 use bytes::Bytes;
-use ethereum_types::{U256, U512, H256, Address};
+use ethereum_types::{U256, H256, Address};
 use rug::{Integer, integer::Order};
 use vm::{
 	self, ActionParams, ParamsType, ActionValue, CallType, MessageCallResult,
@@ -1009,11 +1009,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let c = self.stack.pop_back();
 
 				self.stack.push(if !c.is_zero() {
-					// upcast to 512
-					let a5 = U512::from(a);
-					let res = a5.overflowing_add(U512::from(b)).0;
-					let x = res % U512::from(c);
-					U256::from(x)
+					compute_rug_3(|a, b, c| (a + b) % c, a, b, c)
 				} else {
 					U256::zero()
 				});
@@ -1024,14 +1020,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let c = self.stack.pop_back();
 
 				self.stack.push(if !a.is_zero() && !b.is_zero() && !c.is_zero() {
-					let U256(a_u64s) = a;
-					let U256(b_u64s) = b;
-					let U256(c_u64s) = c;
-					let a0 = Integer::from_digits(&a_u64s, Order::LsfLe);
-					let b0 = Integer::from_digits(&b_u64s, Order::LsfLe);
-					let c0 = Integer::from_digits(&c_u64s, Order::LsfLe);
-					let d0 = a0 * b0 % c0;
-					U256::from_little_endian(d0.to_digits::<u8>(Order::LsfLe).as_slice())
+					compute_rug_3(|a, b, c| (a * b) % c, a, b, c)
 				} else {
 					U256::zero()
 				});
@@ -1176,6 +1165,19 @@ fn u256_to_address(value: &U256) -> Address {
 #[inline]
 fn address_to_u256(value: Address) -> U256 {
 	U256::from(&*H256::from(value))
+}
+
+#[inline]
+fn compute_rug_3<F>(f: F, a: U256, b: U256, c: U256) -> U256
+where F: Fn(Integer, Integer, Integer) -> Integer {
+	let U256(a_u64s) = a;
+	let U256(b_u64s) = b;
+	let U256(c_u64s) = c;
+	let a0 = Integer::from_digits(&a_u64s, Order::LsfLe);
+	let b0 = Integer::from_digits(&b_u64s, Order::LsfLe);
+	let c0 = Integer::from_digits(&c_u64s, Order::LsfLe);
+	let r = f(a0, b0, c0);
+	U256::from_little_endian(r.to_digits::<u8>(Order::LsfLe).as_slice())
 }
 
 #[cfg(test)]
