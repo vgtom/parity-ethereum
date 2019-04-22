@@ -211,14 +211,14 @@ fn mulmod5_1000(b: &mut Criterion) {
 	});
 }
 
-/// Compute mulmod(U256::MAX, U256::MAX, 1) 500 times.
+/// Compute mulmod(U256::MAX, U256::MAX, 11) 500 times.
 fn mulmod11_500(b: &mut Criterion) {
 	b.bench_function("mulmod modulo 11, 500 times", |b| {
 		run_code(b, "6101f45b60019003600b7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80095080600357".from_hex().unwrap());
 	});
 }
 
-/// Compute mulmod(U256::MAX, U256::MAX, 1) 1000 times.
+/// Compute mulmod(U256::MAX, U256::MAX, 11) 1000 times.
 fn mulmod11_1000(b: &mut Criterion) {
 	b.bench_function("mulmod modulo 11, 1000 times", |b| {
 		run_code(b, "6103e85b60019003600b7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80095080600357".from_hex().unwrap());
