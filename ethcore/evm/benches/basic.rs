@@ -49,6 +49,8 @@ criterion_group!(
 	mulmod5_1000,
 	mulmod11_500,
 	mulmod11_1000,
+	mulmod_big_500,
+	mulmod_big_1000,
 	simple_loop_log0_usize,
 	simple_loop_log0_u256,
 	mem_gas_calculation_same_usize,
@@ -225,14 +227,14 @@ fn mulmod11_1000(b: &mut Criterion) {
 
 /// Compute mulmod(U256::MAX, U256::MAX, 0x58bca9711298bc76cd73f173352c8bc1d1640f977c1ec9a849dfde6fdbfbd591) 500 times.
 fn mulmod_big_500(b: &mut Criterion) {
-	b.bench_function("mulmod modulo 11, 500 times", |b| {
+	b.bench_function("mulmod modulo random 256-bit number, 500 times", |b| {
 		run_code(b, "6101f45b600190037f58bca9711298bc76cd73f173352c8bc1d1640f977c1ec9a849dfde6fdbfbd5917fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80095080600357".from_hex().unwrap());
 	});
 }
 
 /// Compute mulmod(U256::MAX, U256::MAX, 0x58bca9711298bc76cd73f173352c8bc1d1640f977c1ec9a849dfde6fdbfbd591) 1000 times.
 fn mulmod_big_1000(b: &mut Criterion) {
-	b.bench_function("mulmod modulo 11, 1000 times", |b| {
+	b.bench_function("mulmod modulo random 256-bit number, 1000 times", |b| {
 		run_code(b, "6103e85b600190037f58bca9711298bc76cd73f173352c8bc1d1640f977c1ec9a849dfde6fdbfbd5917fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80095080600357".from_hex().unwrap());
 	});
 }
