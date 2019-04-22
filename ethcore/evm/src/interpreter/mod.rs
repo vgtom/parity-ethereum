@@ -46,20 +46,14 @@ pub use self::shared_cache::SharedCache;
 
 use bit_set::BitSet;
 
+#[cfg(target_endian = "big")]
+const ENDIANNESS: Order = Order::LsfBe;
+#[cfg(not(target_endian = "big"))]
+const ENDIANNESS: Order = Order::LsfLe;
+
 const GASOMETER_PROOF: &str = "If gasometer is None, Err is immediately returned in step; this function is only called by step; qed";
 
 type ProgramCounter = usize;
-
-const ONE: U256 = U256([1, 0, 0, 0]);
-const TWO: U256 = U256([2, 0, 0, 0]);
-const TWO_POW_5: U256 = U256([0x20, 0, 0, 0]);
-const TWO_POW_8: U256 = U256([0x100, 0, 0, 0]);
-const TWO_POW_16: U256 = U256([0x10000, 0, 0, 0]);
-const TWO_POW_24: U256 = U256([0x1000000, 0, 0, 0]);
-const TWO_POW_64: U256 = U256([0, 0x1, 0, 0]); // 0x1 00000000 00000000
-const TWO_POW_96: U256 = U256([0, 0x100000000, 0, 0]); //0x1 00000000 00000000 00000000
-const TWO_POW_224: U256 = U256([0, 0, 0, 0x100000000]); //0x1 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-const TWO_POW_248: U256 = U256([0, 0, 0, 0x100000000000000]); //0x1 00000000 00000000 00000000 00000000 00000000 00000000 00000000 000000
 
 /// Abstraction over raw vector of Bytes. Easier state management of PC.
 struct CodeReader {
@@ -860,12 +854,12 @@ impl<Cost: CostType> Interpreter<Cost> {
 			instructions::ADD => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-				self.stack.push(a.overflowing_add(b).0);
+                self.stack.push(a.overflowing_add(b).0);
 			},
 			instructions::MUL => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-				self.stack.push(a.overflowing_mul(b).0);
+				self.stack.push(apply_rug_truncated_2(|a, b| a * b, a, b));
 			},
 			instructions::SUB => {
 				let a = self.stack.pop_back();
@@ -876,19 +870,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
 				self.stack.push(if !b.is_zero() {
-					match b {
-						ONE => a,
-						TWO => a >> 1,
-						TWO_POW_5 => a >> 5,
-						TWO_POW_8 => a >> 8,
-						TWO_POW_16 => a >> 16,
-						TWO_POW_24 => a >> 24,
-						TWO_POW_64 => a >> 64,
-						TWO_POW_96 => a >> 96,
-						TWO_POW_224 => a >> 224,
-						TWO_POW_248 => a >> 248,
-						_ => a / b,
-					}
+					apply_rug_2(|a, b| a / b, a, b)
 				} else {
 					U256::zero()
 				});
@@ -897,35 +879,25 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
 				self.stack.push(if !b.is_zero() {
-					a % b
+					apply_rug_2(|a, b| a % b, a, b)
 				} else {
 					U256::zero()
 				});
 			},
 			instructions::SDIV => {
-				let (a, sign_a) = get_and_reset_sign(self.stack.pop_back());
-				let (b, sign_b) = get_and_reset_sign(self.stack.pop_back());
-
-				// -2^255
-				let min = (U256::one() << 255) - U256::one();
-				self.stack.push(if b.is_zero() {
-					U256::zero()
-				} else if a == min && b == !U256::zero() {
-					min
+				let a = self.stack.pop_back();
+				let b = self.stack.pop_back();
+				self.stack.push(if !b.is_zero() {
+					apply_rug_signed_2(|a, b| a / b, a, b)
 				} else {
-					let c = a / b;
-					set_sign(c, sign_a ^ sign_b)
+					U256::zero()
 				});
 			},
 			instructions::SMOD => {
-				let ua = self.stack.pop_back();
-				let ub = self.stack.pop_back();
-				let (a, sign_a) = get_and_reset_sign(ua);
-				let b = get_and_reset_sign(ub).0;
-
+				let a = self.stack.pop_back();
+				let b = self.stack.pop_back();
 				self.stack.push(if !b.is_zero() {
-					let c = a % b;
-					set_sign(c, sign_a)
+					apply_rug_first_signed_2(|a, b| a % b, a, b)
 				} else {
 					U256::zero()
 				});
@@ -933,7 +905,12 @@ impl<Cost: CostType> Interpreter<Cost> {
 			instructions::EXP => {
 				let base = self.stack.pop_back();
 				let expon = self.stack.pop_back();
-				let res = base.overflowing_pow(expon).0;
+				let res = apply_rug_2(|a, b| {
+					match a.pow_mod(&b, &(Integer::from(1) << 256)) {
+						Ok(r) => r,
+						Err(_) => b,
+					}
+				}, base, expon);
 				self.stack.push(res);
 			},
 			instructions::NOT => {
@@ -1009,7 +986,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let c = self.stack.pop_back();
 
 				self.stack.push(if !c.is_zero() {
-					compute_rug_3(|a, b, c| (a + b) % c, a, b, c)
+					apply_rug_3(|a, b, c| (a + b) % c, a, b, c)
 				} else {
 					U256::zero()
 				});
@@ -1020,7 +997,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let c = self.stack.pop_back();
 
 				self.stack.push(if !a.is_zero() && !b.is_zero() && !c.is_zero() {
-					compute_rug_3(|a, b, c| (a * b) % c, a, b, c)
+					apply_rug_3(|a, b, c| (a * b) % c, a, b, c)
 				} else {
 					U256::zero()
 				});
@@ -1149,6 +1126,7 @@ fn get_and_reset_sign(value: U256) -> (U256, bool) {
 	let sign = arr[3].leading_zeros() == 0;
 	(set_sign(value, sign), sign)
 }
+
 fn set_sign(value: U256, sign: bool) -> U256 {
 	if sign {
 		(!U256::zero() ^ value).overflowing_add(U256::one()).0
@@ -1167,17 +1145,77 @@ fn address_to_u256(value: Address) -> U256 {
 	U256::from(&*H256::from(value))
 }
 
+/// Applies an `Integer`-valued function to two arguments of type `U256`.
+///
+/// Panics if the size of the result of function application is greater than 32 bytes.
 #[inline]
-fn compute_rug_3<F>(f: F, a: U256, b: U256, c: U256) -> U256
+fn apply_rug_2<F>(f: F, a: U256, b: U256) -> U256
+where F: Fn(Integer, Integer) -> Integer {
+	let U256(a_u64s) = a;
+	let U256(b_u64s) = b;
+	let a0 = Integer::from_digits(&a_u64s, ENDIANNESS);
+	let b0 = Integer::from_digits(&b_u64s, ENDIANNESS);
+	let r = f(a0, b0);
+	U256::from_little_endian(r.to_digits::<u8>(ENDIANNESS).as_slice())
+}
+
+/// Applies an `Integer`-valued function to two arguments of type `U256`. The first argument is converted to a signed
+/// `Integer`. The second argument is left unsigned.
+///
+/// Panics if the size of the result of function application is greater than 32 bytes.
+#[inline]
+fn apply_rug_first_signed_2<F>(f: F, a: U256, b: U256) -> U256
+where F: Fn(Integer, Integer) -> Integer {
+	let (a, sign_a) = get_and_reset_sign(a);
+	apply_rug_2(|a, b| {
+		let a = if sign_a { a.as_neg().clone() } else { a };
+		f(a, b)
+	}, a, b)
+}
+
+/// Applies an `Integer`-valued function to two arguments of type `U256` whose highest bit indicates the sign in twos
+/// complement encoding.
+///
+/// Panics if the size of the result of function application is greater than 32 bytes.
+#[inline]
+fn apply_rug_signed_2<F>(f: F, a: U256, b: U256) -> U256
+where F: Fn(Integer, Integer) -> Integer {
+	let (a, sign_a) = get_and_reset_sign(a);
+	let (b, sign_b) = get_and_reset_sign(b);
+	apply_rug_2(|a, b| {
+		let a = if sign_a { a.as_neg().clone() } else { a };
+		let b = if sign_b { b.as_neg().clone() } else { b };
+		f(a, b)
+	}, a, b)
+}
+
+/// Applies an `Integer`-valued function to two arguments of type `U256` and truncates the result to 32 bytes to fit
+/// into a result of type `U256`.
+#[inline]
+fn apply_rug_truncated_2<F>(f: F, a: U256, b: U256) -> U256
+where F: Fn(Integer, Integer) -> Integer {
+	let U256(a_u64s) = a;
+	let U256(b_u64s) = b;
+	let a0 = Integer::from_digits(&a_u64s, ENDIANNESS);
+	let b0 = Integer::from_digits(&b_u64s, ENDIANNESS);
+	let r = f(a0, b0);
+	U256::from_little_endian(r.to_digits::<u8>(ENDIANNESS).into_iter().take(32).collect::<Vec<u8>>().as_slice())
+}
+
+/// Applies an `Integer`-valued function to three arguments of type `U256`.
+///
+/// Panics if the size of the result of function application is greater than 32 bytes.
+#[inline]
+fn apply_rug_3<F>(f: F, a: U256, b: U256, c: U256) -> U256
 where F: Fn(Integer, Integer, Integer) -> Integer {
 	let U256(a_u64s) = a;
 	let U256(b_u64s) = b;
 	let U256(c_u64s) = c;
-	let a0 = Integer::from_digits(&a_u64s, Order::LsfLe);
-	let b0 = Integer::from_digits(&b_u64s, Order::LsfLe);
-	let c0 = Integer::from_digits(&c_u64s, Order::LsfLe);
+	let a0 = Integer::from_digits(&a_u64s, ENDIANNESS);
+	let b0 = Integer::from_digits(&b_u64s, ENDIANNESS);
+	let c0 = Integer::from_digits(&c_u64s, ENDIANNESS);
 	let r = f(a0, b0, c0);
-	U256::from_little_endian(r.to_digits::<u8>(Order::LsfLe).as_slice())
+	U256::from_little_endian(r.to_digits::<u8>(ENDIANNESS).as_slice())
 }
 
 #[cfg(test)]
