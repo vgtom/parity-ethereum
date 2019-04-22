@@ -1030,7 +1030,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 					let a0 = Integer::from_digits(&a_u64s, Order::LsfLe);
 					let b0 = Integer::from_digits(&b_u64s, Order::LsfLe);
 					let c0 = Integer::from_digits(&c_u64s, Order::LsfLe);
-					let d0 = (a0.clone() * b0.clone()) % c0.clone();
+					let d0 = a0 * b0 % c0;
 					U256::from_little_endian(d0.to_digits::<u8>(Order::LsfLe).as_slice())
 				} else {
 					U256::zero()
