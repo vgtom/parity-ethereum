@@ -292,7 +292,7 @@ fn addmod500(b: &mut Criterion) {
 /// Compute addmod(a, b, c) for random 256-bit a, b and c. Iterate 1000 times.
 fn addmod1000(b: &mut Criterion) {
 	b.bench_function("addmod randomly generated ints, 1000 times", |b| {
-		run_code(b, "6103e85b600190037f5ed6db9489224124a1a4110ec8bec8b01369c8b549a4b8c4388a1796dc35a9377fb8e0a2b6b1587398c28bf9e9d34ea24ba34df308eec2acedca363b2fce2c25db7fcc2de1f8ec6cc9a24ed2c48b856637f9e45f0a5feee21a196aa42a290ef454ca095080600357".from_hex().unwrap());
+		run_code(b, "6103e85b600190037f5ed6db9489224124a1a4110ec8bec8b01369c8b549a4b8c4388a1796dc35a9377fb8e0a2b6b1587398c28bf9e9d34ea24ba34df308eec2acedca363b2fce2c25db7fcc2de1f8ec6cc9a24ed2c48b856637f9e45f0a5feee21a196aa42a290ef454ca085080600357".from_hex().unwrap());
 	});
 }
 
