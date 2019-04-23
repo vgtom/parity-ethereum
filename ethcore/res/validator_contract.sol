@@ -29,11 +29,13 @@ contract TestList {
 	}
 
 	// Removes a validator from the list.
-	function reportMalicious(address validator) public {
-		validators[indices[validator]] = validators[validators.length-1];
-		delete indices[validator];
-		delete validators[validators.length-1];
-		validators.length--;
+	function reportMalicious(address validator, uint256, bytes calldata) external {
+	    if (validators[indices[validator]] == validator) {
+		    validators[indices[validator]] = validators[validators.length-1];
+		    delete indices[validator];
+		    delete validators[validators.length-1];
+		    validators.length--;
+	    }
 	}
 
 	// Benign validator behaviour report. Kept here for regression testing.
@@ -42,13 +44,16 @@ contract TestList {
 	}
 
 	// Checks if `emitInitiateChange` can be called.
-	function emitInitiateChangeCallable() pure public returns (bool) {
-		return true;
+	function emitInitiateChangeCallable() view public returns (bool) {
+		return block.number > 0;
 	}
 
-	// Emits an `InitiateChange` event in production code. Does nothing in the test.
-	function emitInitiateChange() pure public {}
+	// Emits an `InitiateChange` event.
+	function emitInitiateChange() public {
+		emit InitiateChange(blockhash(block.number - 1), validators);
+	}
 
 	// Applies a validator set change in production code. Does nothing in the test.
 	function finalizeChange() pure public {}
 }
+
