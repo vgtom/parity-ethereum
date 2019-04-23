@@ -1199,7 +1199,7 @@ where F: Fn(Integer, Integer) -> Integer {
 	let a0 = Integer::from_digits(&a_u64s, ENDIANNESS);
 	let b0 = Integer::from_digits(&b_u64s, ENDIANNESS);
 	let r = f(a0, b0);
-	U256::from_little_endian(r.to_digits::<u8>(ENDIANNESS).into_iter().take(32).collect::<Vec<u8>>().as_slice())
+	U256::from_little_endian(r.to_digits::<u8>(ENDIANNESS).as_slice().chunks(32).next().unwrap())
 }
 
 /// Applies an `Integer`-valued function to three arguments of type `U256`.
