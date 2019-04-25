@@ -13,7 +13,6 @@ contract TestList {
 
 	mapping(address => uint) indices;
 	mapping(bytes32 => address[]) maliceReported;
-	// Should remain 0 because `reportBenign` is no longer used.
 	address public disliked;
 
 	event InitiateChange(bytes32 indexed parentHash, address[] newSet);
