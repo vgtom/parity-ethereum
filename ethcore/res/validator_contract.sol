@@ -45,7 +45,7 @@ contract TestList {
 	}
 
 	// Benign validator behaviour report. Kept here for regression testing.
-	function reportBenign(address validator) public {
+	function reportBenign(address validator, uint256) public {
 		disliked = validator;
 	}
 
