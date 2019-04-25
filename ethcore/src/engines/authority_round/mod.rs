@@ -154,6 +154,8 @@ struct Step {
 	inner: AtomicUsize,
 	/// Duration of this step.
 	duration: AtomicU16,
+	/// Duration of the next step.
+	next_duration: AtomicU16,
 }
 
 impl Step {
@@ -188,6 +190,8 @@ impl Step {
 			error!(target: "engine", "Step counter is too high: {}, aborting", usize::MAX);
 			panic!("step counter is too high: {}", usize::MAX);
 		}
+		// Set the duration of this step.
+		self.duration.store(self.next_duration.load(AtomicOrdering::SeqCst), AtomicOrdering::SeqCst);
 	}
 
 	fn calibrate(&self) {
@@ -708,6 +712,7 @@ impl AuthorityRound {
 						inner: AtomicUsize::new(initial_step as usize),
 						calibrate: our_params.start_step.is_none(),
 						duration: AtomicU16::new(duration),
+						next_duration: AtomicU16::new(duration),
 					},
 					can_propose: AtomicBool::new(true),
 				}),
@@ -916,16 +921,17 @@ impl AuthorityRound {
 		finalized.unwrap_or_default()
 	}
 
-	/// Updates the duration of the step `block_number`.
-	fn update_step_duration(&self, block_number: u64) {
-		if let Some((_, dur)) = self.step_duration.range(0 ..= block_number).last() {
+	/// Schedules a step duration update at the next step after `current_block_num`.
+	fn update_step_duration(&self, current_block_num: u64) {
+		let next_block_num = current_block_num + 1;
+		if let Some((_, dur)) = self.step_duration.range(0 ..= next_block_num).last() {
 			// Change the duration of the next engine step.
-			trace!(target: "engine", "Changing the duration of the step of the block #{} to {} seconds",
-				   block_number, dur);
-			self.step.inner.duration.store(*dur, AtomicOrdering::SeqCst);
+			trace!(target: "engine", "Setting the step duration of the block #{} to {} seconds",
+				   next_block_num, dur);
+			self.step.inner.next_duration.store(*dur, AtomicOrdering::SeqCst);
 		} else {
 			warn!(target: "engine", "Cannot find duration for block #{}; leaving it unchanged",
-				  block_number);
+				  next_block_num);
 		}
 	}
 }
@@ -1220,7 +1226,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 
 	/// Change the next step duration if necessary and apply the block reward on finalisation of the block.
 	fn on_close_block(&self, block: &mut ExecutedBlock) -> Result<(), Error> {
-		self.update_step_duration(block.header().number() + 1);
+		self.update_step_duration(block.header().number());
 		let mut beneficiaries = Vec::new();
 		if block.header().number() >= self.empty_steps_transition {
 			let empty_steps = if block.header().seal().is_empty() {
