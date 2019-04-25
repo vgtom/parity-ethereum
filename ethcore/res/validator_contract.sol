@@ -12,6 +12,7 @@ contract TestList {
 	];
 
 	mapping(address => uint) indices;
+	mapping(bytes32 => address[]) maliceReported;
 	// Should remain 0 because `reportBenign` is no longer used.
 	address public disliked;
 
@@ -29,13 +30,19 @@ contract TestList {
 	}
 
 	// Removes a validator from the list.
-	function reportMalicious(address validator, uint256, bytes calldata) external {
+	function reportMalicious(address validator, uint256 blockNum, bytes calldata) external {
+		maliceReported[keccak256(abi.encode(validator, blockNum))].push(msg.sender);
 	    if (validators[indices[validator]] == validator) {
 		    validators[indices[validator]] = validators[validators.length-1];
 		    delete indices[validator];
 		    delete validators[validators.length-1];
 		    validators.length--;
 	    }
+	}
+
+	// Returns the list of all validators that reported the given validator as malicious for the given block.
+	function maliceReportedForBlock(address validator, uint256 blockNum) public view returns(address[] memory) {
+        return maliceReported[keccak256(abi.encode(validator, blockNum))];
 	}
 
 	// Benign validator behaviour report. Kept here for regression testing.
