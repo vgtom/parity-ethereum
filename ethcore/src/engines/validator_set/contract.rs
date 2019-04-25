@@ -53,18 +53,12 @@ impl ValidatorContract {
 
 impl ValidatorContract {
 	fn transact(&self, data: Bytes) -> Result<(), ::error::Error> {
-		let client = self.client.read().as_ref()
-			.and_then(Weak::upgrade)
-			.ok_or_else(|| "No client!")?;
+		let client = self.client.read().as_ref().and_then(Weak::upgrade).ok_or("No client!")?;
+		let full_client = client.as_full_client().ok_or("No full client!")?;
 
-		match client.as_full_client() {
-			Some(c) => {
-				match c.transact(Action::Call(self.contract_address), data, None, Some(0.into()), None) {
-					Ok(()) | Err(transaction::Error::AlreadyImported) => Ok(()),
-					Err(e) => Err(e)?,
-				}
-			},
-			None => Err("No full client!".into()),
+		match full_client.transact(Action::Call(self.contract_address), data, None, Some(0.into()), None) {
+			Ok(()) | Err(transaction::Error::AlreadyImported) => Ok(()),
+			Err(e) => Err(e)?,
 		}
 	}
 }
@@ -124,11 +118,11 @@ impl ValidatorSet for ValidatorContract {
 
 	fn report_malicious(&self, address: &Address, set_block: BlockNumber, block: BlockNumber, proof: Bytes) {
 		let data = validator_report::functions::report_malicious::encode_input(*address, block, proof);
-		match self.transact(data.clone()) {
+		self.validators.queue_report((*address, set_block, data.clone()));
+		match self.transact(data) {
 			Ok(()) => warn!(target: "engine", "Reported malicious validator {} at block {}", address, set_block),
 			Err(s) => {
 				warn!(target: "engine", "Validator {} could not be reported ({}) on block {}", address, s, set_block);
-				self.validators.queue_report((*address, set_block, data))
 			}
 		}
 	}
