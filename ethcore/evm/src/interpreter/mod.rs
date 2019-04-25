@@ -70,12 +70,12 @@ impl CodeReader {
 		}
 	}
 
-	/// Get `no_of_bytes` from code and convert to U256. Move PC
-	fn read(&mut self, no_of_bytes: usize) -> U256 {
+	/// Gets `num_bytes` from code, converts those to an `Integer` in big-endian order and advances the PC.
+	fn read(&mut self, num_bytes: usize) -> Integer {
 		let pos = self.position;
-		self.position += no_of_bytes;
-		let max = cmp::min(pos + no_of_bytes, self.code.len());
-		U256::from(&self.code[pos..max])
+		self.position += num_bytes;
+		let max = cmp::min(pos + num_bytes, self.code.len());
+		Integer::from_digits(&self.code[pos..max], Order::MsfBe)
 	}
 
 	fn len(&self) -> usize {
@@ -86,14 +86,14 @@ impl CodeReader {
 enum InstructionResult<Gas> {
 	Ok,
 	UnusedGas(Gas),
-	JumpToPosition(U256),
+	JumpToPosition(Integer),
 	StopExecutionNeedsReturn {
 		/// Gas left.
 		gas: Gas,
 		/// Return data offset.
-		init_off: U256,
+		init_off: usize,
 		/// Return data size.
-		init_size: U256,
+		init_size: usize,
 		/// Apply or revert state changes.
 		apply: bool,
 	},
@@ -178,8 +178,8 @@ pub struct Interpreter<Cost: CostType> {
 	done: bool,
 	valid_jump_destinations: Option<Arc<BitSet>>,
 	gasometer: Option<Gasometer<Cost>>,
-	stack: VecStack<U256>,
-	resume_output_range: Option<(U256, U256)>,
+	stack: VecStack<Integer>,
+	resume_output_range: Option<(usize, usize)>,
 	resume_result: Option<InstructionResult<Cost>>,
 	last_stack_ret_len: usize,
 	_type: PhantomData<Cost>,
@@ -219,7 +219,7 @@ impl<Cost: 'static + CostType> vm::ResumeCall for Interpreter<Cost> {
 					(&mut output[..len]).copy_from_slice(&data[..len]);
 
 					this.return_data = data;
-					this.stack.push(U256::one());
+					this.stack.push(Integer::from(1));
 					this.resume_result = Some(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater than current one")));
 				},
 				MessageCallResult::Reverted(gas_left, data) => {
@@ -228,11 +228,11 @@ impl<Cost: 'static + CostType> vm::ResumeCall for Interpreter<Cost> {
 					(&mut output[..len]).copy_from_slice(&data[..len]);
 
 					this.return_data = data;
-					this.stack.push(U256::zero());
+					this.stack.push(Integer::from(0));
 					this.resume_result = Some(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater than current one")));
 				},
 				MessageCallResult::Failed => {
-					this.stack.push(U256::zero());
+					this.stack.push(Integer::from(0));
 					this.resume_result = Some(InstructionResult::Ok);
 				},
 			}
@@ -245,16 +245,16 @@ impl<Cost: 'static + CostType> vm::ResumeCreate for Interpreter<Cost> {
 	fn resume_create(mut self: Box<Self>, result: ContractCreateResult) -> Box<vm::Exec> {
 		match result {
 			ContractCreateResult::Created(address, gas_left) => {
-				self.stack.push(address_to_u256(address));
+				self.stack.push(slice_be_to_integer(&*address));
 				self.resume_result = Some(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater.")));
 			},
 			ContractCreateResult::Reverted(gas_left, return_data) => {
-				self.stack.push(U256::zero());
+				self.stack.push(Integer::from(0));
 				self.return_data = return_data;
 				self.resume_result = Some(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater.")));
 			},
 			ContractCreateResult::Failed => {
-				self.stack.push(U256::zero());
+				self.stack.push(Integer::from(0));
 				self.resume_result = Some(InstructionResult::Ok);
 			},
 		}
@@ -270,7 +270,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 		let informant = informant::EvmInformant::new(depth);
 		let valid_jump_destinations = None;
 		let gasometer = Cost::from_u256(params.gas).ok().map(|gas| Gasometer::<Cost>::new(gas));
-		let stack = VecStack::with_capacity(schedule.stack_limit, U256::zero());
+		let stack = VecStack::with_capacity(schedule.stack_limit);
 
 		Interpreter {
 			cache, params, reader, informant,
@@ -337,7 +337,8 @@ impl<Cost: CostType> Interpreter<Cost> {
 				// Calculate gas cost
 				let requirements = self.gasometer.as_mut().expect(GASOMETER_PROOF).requirements(ext, instruction, info, &self.stack, self.mem.size())?;
 				if self.do_trace {
-					ext.trace_prepare_execute(self.reader.position - 1, opcode, requirements.gas_cost.as_u256(), Self::mem_written(instruction, &self.stack), Self::store_written(instruction, &self.stack));
+					let store_wr = Self::store_written(instruction, &self.stack).and_then(|(a, b)| Some((integer_to_u256(&a), integer_to_u256(&b))));
+					ext.trace_prepare_execute(self.reader.position - 1, opcode, requirements.gas_cost.as_u256(), Self::mem_written(instruction, &self.stack), store_wr);
 				}
 
 				self.gasometer.as_mut().expect(GASOMETER_PROOF).verify_gas(&requirements.gas_cost)?;
@@ -370,7 +371,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 		if self.do_trace {
 			ext.trace_executed(
 				self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas.as_u256(),
-				self.stack.peek_top(self.last_stack_ret_len),
+				self.stack.peek_top(self.last_stack_ret_len).iter().map(integer_to_u256).collect::<Vec<_>>().as_slice(),
 				&self.mem,
 			);
 		}
@@ -441,9 +442,9 @@ impl<Cost: CostType> Interpreter<Cost> {
 
 	fn mem_written(
 		instruction: Instruction,
-		stack: &Stack<U256>
+		stack: &Stack<Integer>
 	) -> Option<(usize, usize)> {
-		let read = |pos| stack.peek(pos).low_u64() as usize;
+		let read = |pos| stack.peek(pos).to_usize_wrapping();
 		let written = match instruction {
 			instructions::MSTORE | instructions::MLOAD => Some((read(0), 32)),
 			instructions::MSTORE8 => Some((read(0), 1)),
@@ -462,8 +463,8 @@ impl<Cost: CostType> Interpreter<Cost> {
 
 	fn store_written(
 		instruction: Instruction,
-		stack: &Stack<U256>
-	) -> Option<(U256, U256)> {
+		stack: &Stack<Integer>
+	) -> Option<(Integer, Integer)> {
 		match instruction {
 			instructions::SSTORE => Some((stack.peek(0).clone(), stack.peek(1).clone())),
 			_ => None,
@@ -487,7 +488,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 			instructions::JUMPI => {
 				let jump = self.stack.pop_back();
 				let condition = self.stack.pop_back();
-				if !condition.is_zero() {
+				if condition != 0 {
 					return Ok(InstructionResult::JumpToPosition(
 						jump
 					));
@@ -497,12 +498,12 @@ impl<Cost: CostType> Interpreter<Cost> {
 				// ignore
 			},
 			instructions::CREATE | instructions::CREATE2 => {
-				let endowment = self.stack.pop_back();
-				let init_off = self.stack.pop_back();
-				let init_size = self.stack.pop_back();
+				let endowment = integer_to_u256(&self.stack.pop_back());
+				let init_off = self.stack.pop_back().to_usize_wrapping();
+				let init_size = self.stack.pop_back().to_usize_wrapping();
 				let address_scheme = match instruction {
 					instructions::CREATE => CreateContractAddress::FromSenderAndNonce,
-					instructions::CREATE2 => CreateContractAddress::FromSenderSaltAndCodeHash(self.stack.pop_back().into()),
+					instructions::CREATE2 => CreateContractAddress::FromSenderSaltAndCodeHash(integer_to_hash(&self.stack.pop_back())),
 					_ => unreachable!("instruction can only be CREATE/CREATE2 checked above; qed"),
 				};
 
@@ -517,7 +518,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 
 				let can_create = ext.balance(&self.params.address)? >= endowment && ext.depth() < ext.schedule().max_depth;
 				if !can_create {
-					self.stack.push(U256::zero());
+					self.stack.push(Integer::from(0));
 					return Ok(InstructionResult::UnusedGas(create_gas));
 				}
 
@@ -526,16 +527,16 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let create_result = ext.create(&create_gas.as_u256(), &endowment, contract_code, address_scheme, true);
 				return match create_result {
 					Ok(ContractCreateResult::Created(address, gas_left)) => {
-						self.stack.push(address_to_u256(address));
+						self.stack.push(slice_be_to_integer(&*address));
 						Ok(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater.")))
 					},
 					Ok(ContractCreateResult::Reverted(gas_left, return_data)) => {
-						self.stack.push(U256::zero());
+						self.stack.push(Integer::from(0));
 						self.return_data = return_data;
 						Ok(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater.")))
 					},
 					Ok(ContractCreateResult::Failed) => {
-						self.stack.push(U256::zero());
+						self.stack.push(Integer::from(0));
 						Ok(InstructionResult::Ok)
 					},
 					Err(trap) => {
@@ -549,20 +550,20 @@ impl<Cost: CostType> Interpreter<Cost> {
 				self.stack.pop_back();
 				let call_gas = provided.expect("`provided` comes through Self::exec from `Gasometer::get_gas_cost_mem`; `gas_gas_mem_cost` guarantees `Some` when instruction is `CALL`/`CALLCODE`/`DELEGATECALL`/`CREATE`; this is one of `CALL`/`CALLCODE`/`DELEGATECALL`; qed");
 				let code_address = self.stack.pop_back();
-				let code_address = u256_to_address(&code_address);
+				let code_address = integer_to_address(&code_address);
 
 				let value = if instruction == instructions::DELEGATECALL {
 					None
 				} else if instruction == instructions::STATICCALL {
-					Some(U256::zero())
+					Some(U256::from(0))
 				} else {
-					Some(self.stack.pop_back())
+					Some(integer_to_u256(&self.stack.pop_back()))
 				};
 
-				let in_off = self.stack.pop_back();
-				let in_size = self.stack.pop_back();
-				let out_off = self.stack.pop_back();
-				let out_size = self.stack.pop_back();
+				let in_off = self.stack.pop_back().to_usize_wrapping();
+				let in_size = self.stack.pop_back().to_usize_wrapping();
+				let out_off = self.stack.pop_back().to_usize_wrapping();
+				let out_size = self.stack.pop_back().to_usize_wrapping();
 
 				// Add stipend (only CALL|CALLCODE when value > 0)
 				let call_gas = call_gas.overflow_add(value.map_or_else(|| Cost::from(0), |val| match val.is_zero() {
@@ -593,7 +594,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 
 				let can_call = has_balance && ext.depth() < ext.schedule().max_depth;
 				if !can_call {
-					self.stack.push(U256::zero());
+					self.stack.push(Integer::from(0));
 					return Ok(InstructionResult::UnusedGas(call_gas));
 				}
 
@@ -610,7 +611,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 						let len = cmp::min(output.len(), data.len());
 						(&mut output[..len]).copy_from_slice(&data[..len]);
 
-						self.stack.push(U256::one());
+						self.stack.push(Integer::from(1));
 						self.return_data = data;
 						Ok(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater than current one")))
 					},
@@ -619,12 +620,12 @@ impl<Cost: CostType> Interpreter<Cost> {
 						let len = cmp::min(output.len(), data.len());
 						(&mut output[..len]).copy_from_slice(&data[..len]);
 
-						self.stack.push(U256::zero());
+						self.stack.push(Integer::from(0));
 						self.return_data = data;
 						Ok(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater than current one")))
 					},
 					Ok(MessageCallResult::Failed) => {
-						self.stack.push(U256::zero());
+						self.stack.push(Integer::from(0));
 						Ok(InstructionResult::Ok)
 					},
 					Err(trap) => {
@@ -633,14 +634,14 @@ impl<Cost: CostType> Interpreter<Cost> {
 				};
 			},
 			instructions::RETURN => {
-				let init_off = self.stack.pop_back();
-				let init_size = self.stack.pop_back();
+				let init_off = self.stack.pop_back().to_usize_wrapping();
+				let init_size = self.stack.pop_back().to_usize_wrapping();
 
 				return Ok(InstructionResult::StopExecutionNeedsReturn {gas: gas, init_off: init_off, init_size: init_size, apply: true})
 			},
 			instructions::REVERT => {
-				let init_off = self.stack.pop_back();
-				let init_size = self.stack.pop_back();
+				let init_off = self.stack.pop_back().to_usize_wrapping();
+				let init_size = self.stack.pop_back().to_usize_wrapping();
 
 				return Ok(InstructionResult::StopExecutionNeedsReturn {gas: gas, init_off: init_off, init_size: init_size, apply: false})
 			},
@@ -649,17 +650,17 @@ impl<Cost: CostType> Interpreter<Cost> {
 			},
 			instructions::SUICIDE => {
 				let address = self.stack.pop_back();
-				ext.suicide(&u256_to_address(&address))?;
+				ext.suicide(&integer_to_address(&address))?;
 				return Ok(InstructionResult::StopExecution);
 			},
 			instructions::LOG0 | instructions::LOG1 | instructions::LOG2 | instructions::LOG3 | instructions::LOG4 => {
 				let no_of_topics = instruction.log_topics().expect("log_topics always return some for LOG* instructions; qed");
 
-				let offset = self.stack.pop_back();
-				let size = self.stack.pop_back();
+				let offset = self.stack.pop_back().to_usize_wrapping();
+				let size = self.stack.pop_back().to_usize_wrapping();
 				let topics = self.stack.pop_n(no_of_topics)
 					.iter()
-					.map(H256::from)
+					.map(integer_to_hash)
 					.collect();
 				ext.log(topics, self.mem.read_slice(offset, size))?;
 			},
@@ -671,46 +672,47 @@ impl<Cost: CostType> Interpreter<Cost> {
 			instructions::PUSH21 | instructions::PUSH22 | instructions::PUSH23 | instructions::PUSH24 |
 			instructions::PUSH25 | instructions::PUSH26 | instructions::PUSH27 | instructions::PUSH28 |
 			instructions::PUSH29 | instructions::PUSH30 | instructions::PUSH31 | instructions::PUSH32 => {
-				let bytes = instruction.push_bytes().expect("push_bytes always return some for PUSH* instructions");
-				let val = self.reader.read(bytes);
+				let num_bytes = instruction.push_bytes().expect("push_bytes always return some for PUSH* instructions");
+				let val = self.reader.read(num_bytes);
 				self.stack.push(val);
 			},
 			instructions::MLOAD => {
-				let word = self.mem.read(self.stack.pop_back());
-				self.stack.push(U256::from(word));
+				let offset = self.stack.pop_back().to_usize_wrapping();
+				let word = self.mem.read(offset);
+				self.stack.push(word);
 			},
 			instructions::MSTORE => {
-				let offset = self.stack.pop_back();
+				let offset = self.stack.pop_back().to_usize_wrapping();
 				let word = self.stack.pop_back();
 				Memory::write(&mut self.mem, offset, word);
 			},
 			instructions::MSTORE8 => {
-				let offset = self.stack.pop_back();
-				let byte = self.stack.pop_back();
+				let offset = self.stack.pop_back().to_usize_wrapping();
+				let byte = self.stack.pop_back().to_u8_wrapping();
 				self.mem.write_byte(offset, byte);
 			},
 			instructions::MSIZE => {
-				self.stack.push(U256::from(self.mem.size()));
+				self.stack.push(Integer::from(self.mem.size()));
 			},
 			instructions::SHA3 => {
-				let offset = self.stack.pop_back();
-				let size = self.stack.pop_back();
+				let offset = self.stack.pop_back().to_usize_wrapping();
+				let size = self.stack.pop_back().to_usize_wrapping();
 				let k = keccak(self.mem.read_slice(offset, size));
-				self.stack.push(U256::from(&*k));
+				self.stack.push(slice_be_to_integer(&*k));
 			},
 			instructions::SLOAD => {
-				let key = H256::from(&self.stack.pop_back());
-				let word = U256::from(&*ext.storage_at(&key)?);
-				self.stack.push(word);
+				let key = &integer_to_hash(&self.stack.pop_back());
+				let word = ext.storage_at(&key)?;
+				self.stack.push(slice_be_to_integer(&*word));
 			},
 			instructions::SSTORE => {
-				let address = H256::from(&self.stack.pop_back());
-				let val = self.stack.pop_back();
+				let key = integer_to_hash(&self.stack.pop_back());
+				let val = integer_to_u256(&self.stack.pop_back());
 
-				let current_val = U256::from(&*ext.storage_at(&address)?);
+				let current_val = U256::from(ext.storage_at(&key)?);
 				// Increase refund for clear
 				if ext.schedule().eip1283 {
-					let original_val = U256::from(&*ext.initial_storage_at(&address)?);
+					let original_val = U256::from(&*ext.initial_storage_at(&key)?);
 					gasometer::handle_eip1283_sstore_clears_refund(ext, &original_val, &current_val, &val);
 				} else {
 					if !current_val.is_zero() && val.is_zero() {
@@ -718,68 +720,69 @@ impl<Cost: CostType> Interpreter<Cost> {
 						ext.add_sstore_refund(sstore_clears_schedule);
 					}
 				}
-				ext.set_storage(address, H256::from(&val))?;
+				ext.set_storage(key, H256::from(val))?;
 			},
 			instructions::PC => {
-				self.stack.push(U256::from(self.reader.position - 1));
+				self.stack.push(Integer::from(self.reader.position - 1));
 			},
 			instructions::GAS => {
-				self.stack.push(gas.as_u256());
+				// FIXME: refactor CostType with Integer instead of U256.
+				self.stack.push(u256_to_integer(&gas.as_u256()));
 			},
 			instructions::ADDRESS => {
-				self.stack.push(address_to_u256(self.params.address.clone()));
+				self.stack.push(slice_be_to_integer(&*self.params.address));
 			},
 			instructions::ORIGIN => {
-				self.stack.push(address_to_u256(self.params.origin.clone()));
+				self.stack.push(slice_be_to_integer(&*self.params.origin));
 			},
 			instructions::BALANCE => {
-				let address = u256_to_address(&self.stack.pop_back());
-				let balance = ext.balance(&address)?;
+				let address = integer_to_address(&self.stack.pop_back());
+				let balance = u256_to_integer(&ext.balance(&address)?);
 				self.stack.push(balance);
 			},
 			instructions::CALLER => {
-				self.stack.push(address_to_u256(self.params.sender.clone()));
+				self.stack.push(slice_be_to_integer(&*self.params.sender));
 			},
 			instructions::CALLVALUE => {
 				self.stack.push(match self.params.value {
-					ActionValue::Transfer(val) | ActionValue::Apparent(val) => val
+					ActionValue::Transfer(val) | ActionValue::Apparent(val) => u256_to_integer(&val)
 				});
 			},
 			instructions::CALLDATALOAD => {
-				let big_id = self.stack.pop_back();
-				let id = big_id.low_u64() as usize;
-				let max = id.wrapping_add(32);
+				let start = self.stack.pop_back().to_usize_wrapping();
+				let end = start + 32;
 				if let Some(data) = self.params.data.as_ref() {
-					let bound = cmp::min(data.len(), max);
-					if id < bound && big_id < U256::from(data.len()) {
+					let bound = end.min(data.len());
+					if start < bound {
 						let mut v = [0u8; 32];
-						v[0..bound-id].clone_from_slice(&data[id..bound]);
-						self.stack.push(U256::from(&v[..]))
+						v[0..bound - start].clone_from_slice(&data[start..bound]);
+						self.stack.push(Integer::from_digits(&v[..], Order::MsfBe))
 					} else {
-						self.stack.push(U256::zero())
+						self.stack.push(Integer::from(0))
 					}
 				} else {
-					self.stack.push(U256::zero())
+					self.stack.push(Integer::from(0))
 				}
 			},
 			instructions::CALLDATASIZE => {
-				self.stack.push(U256::from(self.params.data.as_ref().map_or(0, |l| l.len())));
+				self.stack.push(Integer::from(self.params.data.as_ref().map_or(0, |l| l.len())));
 			},
 			instructions::CODESIZE => {
-				self.stack.push(U256::from(self.reader.len()));
+				self.stack.push(Integer::from(self.reader.len()));
 			},
 			instructions::RETURNDATASIZE => {
-				self.stack.push(U256::from(self.return_data.len()))
+				self.stack.push(Integer::from(self.return_data.len()));
 			},
 			instructions::EXTCODESIZE => {
-				let address = u256_to_address(&self.stack.pop_back());
+				let address = integer_to_address(&self.stack.pop_back());
 				let len = ext.extcodesize(&address)?.unwrap_or(0);
-				self.stack.push(U256::from(len));
+				self.stack.push(Integer::from(len));
 			},
 			instructions::EXTCODEHASH => {
-				let address = u256_to_address(&self.stack.pop_back());
+				// FIXME: consider returning an Integer from `ext.extcodehash`.
+				let address = integer_to_address(&self.stack.pop_back());
 				let hash = ext.extcodehash(&address)?.unwrap_or_else(H256::zero);
-				self.stack.push(U256::from(hash));
+				self.stack.push(slice_be_to_integer(&*hash));
 			},
 			instructions::CALLDATACOPY => {
 				Self::copy_data_to_memory(&mut self.mem, &mut self.stack, &self.params.data.as_ref().map_or_else(|| &[] as &[u8], |d| &*d as &[u8]));
@@ -788,8 +791,8 @@ impl<Cost: CostType> Interpreter<Cost> {
 				{
 					let source_offset = self.stack.peek(1);
 					let size = self.stack.peek(2);
-					let return_data_len = U256::from(self.return_data.len());
-					if source_offset.saturating_add(*size) > return_data_len {
+					let return_data_len = Integer::from(self.return_data.len());
+					if Integer::from(source_offset + size) > return_data_len {
 						return Err(vm::Error::OutOfBounds);
 					}
 				}
@@ -799,7 +802,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 				Self::copy_data_to_memory(&mut self.mem, &mut self.stack, &self.reader.code);
 			},
 			instructions::EXTCODECOPY => {
-				let address = u256_to_address(&self.stack.pop_back());
+				let address = integer_to_address(&self.stack.pop_back());
 				let code = ext.extcode(&address)?;
 				Self::copy_data_to_memory(
 					&mut self.mem,
@@ -808,27 +811,27 @@ impl<Cost: CostType> Interpreter<Cost> {
 				);
 			},
 			instructions::GASPRICE => {
-				self.stack.push(self.params.gas_price.clone());
+				self.stack.push(u256_to_integer(&self.params.gas_price));
 			},
 			instructions::BLOCKHASH => {
-				let block_number = self.stack.pop_back();
+				let block_number = integer_to_u256(&self.stack.pop_back());
 				let block_hash = ext.blockhash(&block_number);
-				self.stack.push(U256::from(&*block_hash));
+				self.stack.push(slice_be_to_integer(&*block_hash));
 			},
 			instructions::COINBASE => {
-				self.stack.push(address_to_u256(ext.env_info().author.clone()));
+				self.stack.push(slice_be_to_integer(&*ext.env_info().author));
 			},
 			instructions::TIMESTAMP => {
-				self.stack.push(U256::from(ext.env_info().timestamp));
+				self.stack.push(Integer::from(ext.env_info().timestamp));
 			},
 			instructions::NUMBER => {
-				self.stack.push(U256::from(ext.env_info().number));
+				self.stack.push(Integer::from(ext.env_info().number));
 			},
 			instructions::DIFFICULTY => {
-				self.stack.push(ext.env_info().difficulty.clone());
+				self.stack.push(u256_to_integer(&ext.env_info().difficulty));
 			},
 			instructions::GASLIMIT => {
-				self.stack.push(ext.env_info().gas_limit.clone());
+				self.stack.push(u256_to_integer(&ext.env_info().gas_limit));
 			},
 
 			// Stack instructions
@@ -854,64 +857,70 @@ impl<Cost: CostType> Interpreter<Cost> {
 			instructions::ADD => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-                self.stack.push(a.overflowing_add(b).0);
+                self.stack.push((a + b).keep_bits(256));
 			},
 			instructions::MUL => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-				self.stack.push(apply_rug_truncated_2(|a, b| a * b, a, b));
+				self.stack.push((a * b).keep_bits(256));
 			},
 			instructions::SUB => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-				self.stack.push(a.overflowing_sub(b).0);
+				// Perform subtraction, wrapping from 0 down to (1 << 256) - 1. The result is a
+				// 256-bit number in twos complement notation.
+				let r = a - b;
+				let wrapped_r = if r >= 0 {
+					r
+				} else {
+					r + (Integer::from(1) << 256)
+				};
+				self.stack.push(wrapped_r);
 			},
 			instructions::DIV => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-				self.stack.push(if !b.is_zero() {
-					apply_rug_2(|a, b| a / b, a, b)
+				self.stack.push(if b != 0 {
+					a / b
 				} else {
-					U256::zero()
+					Integer::from(0)
 				});
 			},
 			instructions::MOD => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-				self.stack.push(if !b.is_zero() {
-					apply_rug_2(|a, b| a % b, a, b)
+				self.stack.push(if b != 0 {
+					a % b
 				} else {
-					U256::zero()
+					Integer::from(0)
 				});
 			},
 			instructions::SDIV => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-				self.stack.push(if !b.is_zero() {
+				self.stack.push(if b != 0 {
 					apply_rug_signed_2(|a, b| a / b, a, b)
 				} else {
-					U256::zero()
+					Integer::from(0)
 				});
 			},
 			instructions::SMOD => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-				self.stack.push(if !b.is_zero() {
+				self.stack.push(if b != 0 {
 					apply_rug_first_signed_2(|a, b| a % b, a, b)
 				} else {
-					U256::zero()
+					Integer::from(0)
 				});
 			},
 			instructions::EXP => {
 				let base = self.stack.pop_back();
 				let expon = self.stack.pop_back();
-				let res = apply_rug_2(|a, b| {
-					match a.pow_mod(&b, &(Integer::from(1) << 256)) {
-						Ok(r) => r,
-						Err(_) => b,
-					}
-				}, base, expon);
-				self.stack.push(res);
+				// FIXME: decide whether to correct the semantics of exponentiation and exponentiate mod 256.
+				let modulus = (Integer::from(1) << 10000) - 1;
+				println!("base {}, expon {}, modulus {}", base, expon, modulus);
+				let res = base.pow_mod(&expon, &modulus).expect("Negative exponent is not allowed");
+				self.stack.push(res.keep_bits(256));
 			},
 			instructions::NOT => {
 				let a = self.stack.pop_back();
@@ -920,7 +929,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 			instructions::LT => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-				self.stack.push(Self::bool_to_u256(a < b));
+				self.stack.push(Integer::from(a < b));
 			},
 			instructions::SLT => {
 				let (a, neg_a) = get_and_reset_sign(self.stack.pop_back());
@@ -930,12 +939,12 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let is_negative_lt = a > b && (neg_a & neg_b);
 				let has_different_signs = neg_a && !neg_b;
 
-				self.stack.push(Self::bool_to_u256(is_positive_lt | is_negative_lt | has_different_signs));
+				self.stack.push(Integer::from(is_positive_lt || is_negative_lt || has_different_signs));
 			},
 			instructions::GT => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-				self.stack.push(Self::bool_to_u256(a > b));
+				self.stack.push(Integer::from(a > b));
 			},
 			instructions::SGT => {
 				let (a, neg_a) = get_and_reset_sign(self.stack.pop_back());
@@ -945,16 +954,16 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let is_negative_gt = a < b && (neg_a & neg_b);
 				let has_different_signs = !neg_a && neg_b;
 
-				self.stack.push(Self::bool_to_u256(is_positive_gt | is_negative_gt | has_different_signs));
+				self.stack.push(Integer::from(is_positive_gt || is_negative_gt || has_different_signs));
 			},
 			instructions::EQ => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-				self.stack.push(Self::bool_to_u256(a == b));
+				self.stack.push(Integer::from(a == b));
 			},
 			instructions::ISZERO => {
 				let a = self.stack.pop_back();
-				self.stack.push(Self::bool_to_u256(a.is_zero()));
+				self.stack.push(Integer::from(a == 0));
 			},
 			instructions::AND => {
 				let a = self.stack.pop_back();
@@ -972,23 +981,24 @@ impl<Cost: CostType> Interpreter<Cost> {
 				self.stack.push(a ^ b);
 			},
 			instructions::BYTE => {
-				let word = self.stack.pop_back();
-				let val = self.stack.pop_back();
-				let byte = match word < U256::from(32) {
-					true => (val >> (8 * (31 - word.low_u64() as usize))) & U256::from(0xff),
-					false => U256::zero()
+				let i = self.stack.pop_back().to_u32_wrapping();
+				let a = self.stack.pop_back();
+				let byte = if i < 32 {
+					(a >> (8 * (31 - i) as u32)).to_u8_wrapping()
+				} else {
+					0
 				};
-				self.stack.push(byte);
+				self.stack.push(Integer::from(byte));
 			},
 			instructions::ADDMOD => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
 				let c = self.stack.pop_back();
 
-				self.stack.push(if !c.is_zero() {
-					apply_rug_3(|a, b, c| (a + b) % c, a, b, c)
+				self.stack.push(if c != 0 {
+					(a + b) % c
 				} else {
-					U256::zero()
+					Integer::from(0)
 				});
 			},
 			instructions::MULMOD => {
@@ -996,20 +1006,20 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let b = self.stack.pop_back();
 				let c = self.stack.pop_back();
 
-				self.stack.push(if !a.is_zero() && !b.is_zero() && !c.is_zero() {
-					apply_rug_3(|a, b, c| (a * b) % c, a, b, c)
+				self.stack.push(if a != 0 && b != 0 && c != 0 {
+					(a * b) % c
 				} else {
-					U256::zero()
+					Integer::from(0)
 				});
 			},
 			instructions::SIGNEXTEND => {
 				let bit = self.stack.pop_back();
-				if bit < U256::from(32) {
+				if bit < 32 {
 					let number = self.stack.pop_back();
-					let bit_position = (bit.low_u64() * 8 + 7) as usize;
+					let bit_position = bit.to_u32_wrapping() * 8 + 7;
 
-					let bit = number.bit(bit_position);
-					let mask = (U256::one() << bit_position) - U256::one();
+					let bit = number.get_bit(bit_position);
+					let mask: Integer = (Integer::from(1) << bit_position) - 1;
 					self.stack.push(if bit {
 						number | !mask
 					} else {
@@ -1018,52 +1028,45 @@ impl<Cost: CostType> Interpreter<Cost> {
 				}
 			},
 			instructions::SHL => {
-				const CONST_256: U256 = U256([256, 0, 0, 0]);
-
 				let shift = self.stack.pop_back();
 				let value = self.stack.pop_back();
 
-				let result = if shift >= CONST_256 {
-					U256::zero()
+				let result = if shift >= 256 {
+					Integer::from(0)
 				} else {
-					value << (shift.as_u32() as usize)
+					value << shift.to_u32_wrapping()
 				};
 				self.stack.push(result);
 			},
 			instructions::SHR => {
-				const CONST_256: U256 = U256([256, 0, 0, 0]);
-
 				let shift = self.stack.pop_back();
 				let value = self.stack.pop_back();
 
-				let result = if shift >= CONST_256 {
-					U256::zero()
+				let result = if shift >= 256 {
+					Integer::from(0)
 				} else {
-					value >> (shift.as_u32() as usize)
+					value >> shift.to_u32_wrapping()
 				};
 				self.stack.push(result);
 			},
 			instructions::SAR => {
 				// We cannot use get_and_reset_sign/set_sign here, because the rounding looks different.
-
-				const CONST_256: U256 = U256([256, 0, 0, 0]);
-				const CONST_HIBIT: U256 = U256([0, 0, 0, 0x8000000000000000]);
-
+				let u256_max = || (Integer::from(1) << 256) - 1;
 				let shift = self.stack.pop_back();
 				let value = self.stack.pop_back();
-				let sign = value & CONST_HIBIT != U256::zero();
+				let sign = value.get_bit(255);
 
-				let result = if shift >= CONST_256 {
+				let result = if shift >= 256 {
 					if sign {
-						U256::max_value()
+						u256_max()
 					} else {
-						U256::zero()
+						Integer::from(0)
 					}
 				} else {
-					let shift = shift.as_u32() as usize;
+					let shift = shift.to_u32_wrapping();
 					let mut shifted = value >> shift;
 					if sign {
-						shifted = shifted | (U256::max_value() << (256 - shift));
+						shifted = shifted | (u256_max() << (256 - shift));
 					}
 					shifted
 				};
@@ -1073,37 +1076,36 @@ impl<Cost: CostType> Interpreter<Cost> {
 		Ok(InstructionResult::Ok)
 	}
 
-	fn copy_data_to_memory(mem: &mut Vec<u8>, stack: &mut Stack<U256>, source: &[u8]) {
-		let dest_offset = stack.pop_back();
-		let source_offset = stack.pop_back();
-		let size = stack.pop_back();
-		let source_size = U256::from(source.len());
+	fn copy_data_to_memory(mem: &mut Vec<u8>, stack: &mut Stack<Integer>, source: &[u8]) {
+		let dest_offset = stack.pop_back().to_usize_wrapping();
+		let source_offset = stack.pop_back().to_usize_wrapping();
+		let size = stack.pop_back().to_usize_wrapping();
+		let source_size = source.len();
 
-		let output_end = match source_offset > source_size || size > source_size || source_offset + size > source_size {
-			true => {
-				let zero_slice = if source_offset > source_size {
-					mem.writeable_slice(dest_offset, size)
-				} else {
-					mem.writeable_slice(dest_offset + source_size - source_offset, source_offset + size - source_size)
-				};
-				for i in zero_slice.iter_mut() {
-					*i = 0;
-				}
-				source.len()
-			},
-			false => (size.low_u64() + source_offset.low_u64()) as usize
+		let output_end = if source_offset > source_size || size > source_size || source_offset + size > source_size {
+			let zero_slice = if source_offset > source_size {
+				mem.writeable_slice(dest_offset, size)
+			} else {
+				mem.writeable_slice(dest_offset + source_size - source_offset, source_offset + size - source_size)
+			};
+			for i in zero_slice.iter_mut() {
+				*i = 0;
+			}
+			source_size
+		} else {
+			size + source_offset
 		};
 
 		if source_offset < source_size {
-			let output_begin = source_offset.low_u64() as usize;
+			let output_begin = source_offset;
 			mem.write_slice(dest_offset, &source[output_begin..output_end]);
 		}
 	}
 
-	fn verify_jump(&self, jump_u: U256, valid_jump_destinations: &BitSet) -> vm::Result<usize> {
-		let jump = jump_u.low_u64() as usize;
+	fn verify_jump(&self, jump_u: Integer, valid_jump_destinations: &BitSet) -> vm::Result<usize> {
+		let jump = jump_u.to_usize_wrapping();
 
-		if valid_jump_destinations.contains(jump) && U256::from(jump) == jump_u {
+		if valid_jump_destinations.contains(jump) && jump == jump_u {
 			Ok(jump)
 		} else {
 			Err(vm::Error::BadJumpDestination {
@@ -1111,52 +1113,70 @@ impl<Cost: CostType> Interpreter<Cost> {
 			})
 		}
 	}
-
-	fn bool_to_u256(val: bool) -> U256 {
-		if val {
-			U256::one()
-		} else {
-			U256::zero()
-		}
-	}
 }
 
-fn get_and_reset_sign(value: U256) -> (U256, bool) {
-	let U256(arr) = value;
-	let sign = arr[3].leading_zeros() == 0;
-	(set_sign(value, sign), sign)
-}
-
-fn set_sign(value: U256, sign: bool) -> U256 {
-	if sign {
-		(!U256::zero() ^ value).overflowing_add(U256::one()).0
+/// Truncates the integer to 256 bits and, treating the result in twos complement notation, returns
+/// its absolute value and sign.
+fn get_and_reset_sign(n: Integer) -> (Integer, bool) {
+	let n = n.keep_bits(256);
+	let sign = n.get_bit(255);
+	let n_abs = if sign {
+		// The result of addition cannot overflow 256 bits because the bit 255 is 0 after ^.
+		(((Integer::from(1) << 256) - 1) ^ n) + 1
 	} else {
-		value
-	}
+		n
+	};
+	(n_abs, sign)
 }
 
+/// Converts a variable length `Integer` to a 32-byte long big-endian `H256`. If the argument is
+/// longer than 32 bytes, the lower 32 bytes are used.
 #[inline]
-fn u256_to_address(value: &U256) -> Address {
-	Address::from(H256::from(value))
+fn integer_to_hash(n: &Integer) -> H256 {
+	const SIZE: usize = 32;
+	let mut r = H256::new();
+	let n256 = Integer::from(n.keep_bits_ref(SIZE as u32 * 8));
+	let digits = n256.to_digits::<u8>(Order::MsfBe);
+	let len = digits.len();
+	r[SIZE - len .. SIZE].copy_from_slice(digits.as_slice());
+	r
 }
 
+/// Converts a variable length `Integer` to a 20-byte long big-endian `Address`. If the argument is longer than 20
+/// bytes, the lower 20 bytes are used.
 #[inline]
-fn address_to_u256(value: Address) -> U256 {
-	U256::from(&*H256::from(value))
+fn integer_to_address(n: &Integer) -> Address {
+	const SIZE: usize = 20;
+	let mut r = Address::new();
+	let n160 = Integer::from(n.keep_bits_ref(SIZE as u32 * 8));
+	let digits = n160.to_digits::<u8>(Order::MsfBe);
+	let len = digits.len();
+	r[SIZE - len .. SIZE].copy_from_slice(digits.as_slice());
+	r
 }
 
-/// Applies an `Integer`-valued function to two arguments of type `U256`.
+/// Converts a variable length `Integer` to a 32-byte long little-endian `U256`. If the argument is longer than 32
+/// bytes, the lower 32 bytes are used.
+#[inline]
+fn integer_to_u256(n: &Integer) -> U256 {
+	let n256 = Integer::from(n.keep_bits_ref(256));
+	let digits = n256.to_digits::<u8>(Order::LsfLe);
+	U256::from_little_endian(digits.as_slice())
+}
+
+/// Converts a 32-byte long little-endian `U256` to a variable length `Integer`.
+#[inline]
+fn u256_to_integer(n: &U256) -> Integer {
+	let U256(n_u64s) = n;
+	Integer::from_digits(n_u64s, ENDIANNESS)
+}
+
+/// Converts a big-endian slice to an `Integer`.
 ///
-/// Panics if the size of the result of function application is greater than 32 bytes.
+// FIXME: add tests.
 #[inline]
-fn apply_rug_2<F>(f: F, a: U256, b: U256) -> U256
-where F: Fn(Integer, Integer) -> Integer {
-	let U256(a_u64s) = a;
-	let U256(b_u64s) = b;
-	let a0 = Integer::from_digits(&a_u64s, ENDIANNESS);
-	let b0 = Integer::from_digits(&b_u64s, ENDIANNESS);
-	let r = f(a0, b0);
-	U256::from_little_endian(r.to_digits::<u8>(ENDIANNESS).as_slice())
+fn slice_be_to_integer(slice: &[u8]) -> Integer {
+	Integer::from_digits(slice, Order::MsfBe)
 }
 
 /// Applies an `Integer`-valued function to two arguments of type `U256`. The first argument is converted to a signed
@@ -1164,13 +1184,11 @@ where F: Fn(Integer, Integer) -> Integer {
 ///
 /// Panics if the size of the result of function application is greater than 32 bytes.
 #[inline]
-fn apply_rug_first_signed_2<F>(f: F, a: U256, b: U256) -> U256
+fn apply_rug_first_signed_2<F>(f: F, a: Integer, b: Integer) -> Integer
 where F: Fn(Integer, Integer) -> Integer {
 	let (a, sign_a) = get_and_reset_sign(a);
-	apply_rug_2(|a, b| {
-		let a = if sign_a { a.as_neg().clone() } else { a };
-		f(a, b)
-	}, a, b)
+	let a = if sign_a { a.as_neg().clone() } else { a };
+	f(a, b)
 }
 
 /// Applies an `Integer`-valued function to two arguments of type `U256` whose highest bit indicates the sign in twos
@@ -1178,44 +1196,13 @@ where F: Fn(Integer, Integer) -> Integer {
 ///
 /// Panics if the size of the result of function application is greater than 32 bytes.
 #[inline]
-fn apply_rug_signed_2<F>(f: F, a: U256, b: U256) -> U256
+fn apply_rug_signed_2<F>(f: F, a: Integer, b: Integer) -> Integer
 where F: Fn(Integer, Integer) -> Integer {
 	let (a, sign_a) = get_and_reset_sign(a);
 	let (b, sign_b) = get_and_reset_sign(b);
-	apply_rug_2(|a, b| {
-		let a = if sign_a { a.as_neg().clone() } else { a };
-		let b = if sign_b { b.as_neg().clone() } else { b };
-		f(a, b)
-	}, a, b)
-}
-
-/// Applies an `Integer`-valued function to two arguments of type `U256` and truncates the result to 32 bytes to fit
-/// into a result of type `U256`.
-#[inline]
-fn apply_rug_truncated_2<F>(f: F, a: U256, b: U256) -> U256
-where F: Fn(Integer, Integer) -> Integer {
-	let U256(a_u64s) = a;
-	let U256(b_u64s) = b;
-	let a0 = Integer::from_digits(&a_u64s, ENDIANNESS);
-	let b0 = Integer::from_digits(&b_u64s, ENDIANNESS);
-	let r = f(a0, b0);
-	U256::from_little_endian(r.to_digits::<u8>(ENDIANNESS).as_slice().chunks(32).next().unwrap())
-}
-
-/// Applies an `Integer`-valued function to three arguments of type `U256`.
-///
-/// Panics if the size of the result of function application is greater than 32 bytes.
-#[inline]
-fn apply_rug_3<F>(f: F, a: U256, b: U256, c: U256) -> U256
-where F: Fn(Integer, Integer, Integer) -> Integer {
-	let U256(a_u64s) = a;
-	let U256(b_u64s) = b;
-	let U256(c_u64s) = c;
-	let a0 = Integer::from_digits(&a_u64s, ENDIANNESS);
-	let b0 = Integer::from_digits(&b_u64s, ENDIANNESS);
-	let c0 = Integer::from_digits(&c_u64s, ENDIANNESS);
-	let r = f(a0, b0, c0);
-	U256::from_little_endian(r.to_digits::<u8>(ENDIANNESS).as_slice())
+	let a = if sign_a { a.as_neg().clone() } else { a };
+	let b = if sign_b { b.as_neg().clone() } else { b };
+	f(a, b)
 }
 
 #[cfg(test)]

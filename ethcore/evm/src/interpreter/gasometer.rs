@@ -15,8 +15,9 @@
 // along with Parity Ethereum.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::cmp;
-use ethereum_types::{U256, H256};
-use super::u256_to_address;
+use rug::Integer;
+use ethereum_types::U256;
+use super::{integer_to_address, integer_to_hash, integer_to_u256};
 
 use {evm, vm};
 use instructions::{self, Instruction, InstructionInfo};
@@ -109,7 +110,7 @@ impl<Gas: evm::CostType> Gasometer<Gas> {
 		ext: &vm::Ext,
 		instruction: Instruction,
 		info: &InstructionInfo,
-		stack: &Stack<U256>,
+		stack: &Stack<Integer>,
 		current_mem_size: usize,
 	) -> vm::Result<InstructionRequirements<Gas>> {
 		let schedule = ext.schedule();
@@ -121,8 +122,8 @@ impl<Gas: evm::CostType> Gasometer<Gas> {
 				Request::Gas(Gas::from(1))
 			},
 			instructions::SSTORE => {
-				let address = H256::from(stack.peek(0));
-				let newval = stack.peek(1);
+				let address = integer_to_hash(stack.peek(0));
+				let newval = integer_to_u256(stack.peek(1));
 				let val = U256::from(&*ext.storage_at(&address)?);
 
 				let gas = if schedule.eip1283 {
@@ -155,7 +156,7 @@ impl<Gas: evm::CostType> Gasometer<Gas> {
 				let mut gas = Gas::from(schedule.suicide_gas);
 
 				let is_value_transfer = !ext.origin_balance()?.is_zero();
-				let address = u256_to_address(stack.peek(0));
+				let address = integer_to_address(stack.peek(0));
 				if (
 					!schedule.no_empty && !ext.exists(&address)?
 				) || (
@@ -176,21 +177,25 @@ impl<Gas: evm::CostType> Gasometer<Gas> {
 				Request::GasMem(default_gas, mem_needed(stack.peek(0), stack.peek(1))?)
 			},
 			instructions::SHA3 => {
-				let words = overflowing!(to_word_size(Gas::from_u256(*stack.peek(1))?));
+				let words = overflowing!(to_word_size(Gas::from_u256(integer_to_u256(stack.peek(1)))?));
 				let gas = overflowing!(Gas::from(schedule.sha3_gas).overflow_add(overflowing!(Gas::from(schedule.sha3_word_gas).overflow_mul(words))));
 				Request::GasMem(gas, mem_needed(stack.peek(0), stack.peek(1))?)
 			},
 			instructions::CALLDATACOPY | instructions::CODECOPY | instructions::RETURNDATACOPY => {
-				Request::GasMemCopy(default_gas, mem_needed(stack.peek(0), stack.peek(2))?, Gas::from_u256(*stack.peek(2))?)
+				Request::GasMemCopy(default_gas,
+									mem_needed(stack.peek(0), stack.peek(2))?,
+									Gas::from_u256(integer_to_u256(stack.peek(2)))?)
 			},
 			instructions::EXTCODECOPY => {
-				Request::GasMemCopy(schedule.extcodecopy_base_gas.into(), mem_needed(stack.peek(1), stack.peek(3))?, Gas::from_u256(*stack.peek(3))?)
+				Request::GasMemCopy(schedule.extcodecopy_base_gas.into(),
+									mem_needed(stack.peek(1), stack.peek(3))?,
+									Gas::from_u256(integer_to_u256(stack.peek(3)))?)
 			},
 			instructions::LOG0 | instructions::LOG1 | instructions::LOG2 | instructions::LOG3 | instructions::LOG4 => {
 				let no_of_topics = instruction.log_topics().expect("log_topics always return some for LOG* instructions; qed");
 				let log_gas = schedule.log_gas + schedule.log_topic_gas * no_of_topics;
 
-				let data_gas = overflowing!(Gas::from_u256(*stack.peek(1))?.overflow_mul(Gas::from(schedule.log_data_gas)));
+				let data_gas = overflowing!(Gas::from_u256(integer_to_u256(stack.peek(1)))?.overflow_mul(Gas::from(schedule.log_data_gas)));
 				let gas = overflowing!(data_gas.overflow_add(Gas::from(log_gas)));
 				Request::GasMem(gas, mem_needed(stack.peek(0), stack.peek(1))?)
 			},
@@ -201,8 +206,8 @@ impl<Gas: evm::CostType> Gasometer<Gas> {
 					mem_needed(stack.peek(3), stack.peek(4))?
 				);
 
-				let address = u256_to_address(stack.peek(1));
-				let is_value_transfer = !stack.peek(2).is_zero();
+				let address = integer_to_address(stack.peek(1));
+				let is_value_transfer = *stack.peek(2) != 0;
 
 				if instruction == instructions::CALL && (
 					(!schedule.no_empty && !ext.exists(&address)?)
@@ -216,7 +221,7 @@ impl<Gas: evm::CostType> Gasometer<Gas> {
 					gas = overflowing!(gas.overflow_add(schedule.call_value_transfer_gas.into()));
 				}
 
-				let requested = *stack.peek(0);
+				let requested = integer_to_u256(stack.peek(0));
 
 				Request::GasMemProvide(gas, mem, Some(requested))
 			},
@@ -226,7 +231,7 @@ impl<Gas: evm::CostType> Gasometer<Gas> {
 					mem_needed(stack.peek(4), stack.peek(5))?,
 					mem_needed(stack.peek(2), stack.peek(3))?
 				);
-				let requested = *stack.peek(0);
+				let requested = integer_to_u256(stack.peek(0));
 
 				Request::GasMemProvide(gas, mem, Some(requested))
 			},
@@ -244,7 +249,7 @@ impl<Gas: evm::CostType> Gasometer<Gas> {
 				let len = stack.peek(2);
 
 				let base = Gas::from(schedule.create_gas);
-				let word = overflowing!(to_word_size(Gas::from_u256(*len)?));
+				let word = overflowing!(to_word_size(Gas::from_u256(integer_to_u256(len))?));
 				let word_gas = overflowing!(Gas::from(schedule.sha3_word_gas).overflow_mul(word));
 				let gas = overflowing!(base.overflow_add(word_gas));
 				let mem = mem_needed(start, len)?;
@@ -253,7 +258,7 @@ impl<Gas: evm::CostType> Gasometer<Gas> {
 			},
 			instructions::EXP => {
 				let expon = stack.peek(1);
-				let bytes = ((expon.bits() + 7) / 8) as usize;
+				let bytes = ((expon.significant_bits() + 7) / 8) as usize;
 				let gas = Gas::from(schedule.exp_gas + schedule.exp_byte_gas * bytes);
 				Request::Gas(gas)
 			},
@@ -339,17 +344,17 @@ impl<Gas: evm::CostType> Gasometer<Gas> {
 }
 
 #[inline]
-fn mem_needed_const<Gas: evm::CostType>(mem: &U256, add: usize) -> vm::Result<Gas> {
-	Gas::from_u256(overflowing!(mem.overflowing_add(U256::from(add))))
+fn mem_needed_const<Gas: evm::CostType>(mem: &Integer, add: usize) -> vm::Result<Gas> {
+	Gas::from_u256(overflowing!(integer_to_u256(mem).overflowing_add(U256::from(add))))
 }
 
 #[inline]
-fn mem_needed<Gas: evm::CostType>(offset: &U256, size: &U256) -> vm::Result<Gas> {
-	if size.is_zero() {
+fn mem_needed<Gas: evm::CostType>(offset: &Integer, size: &Integer) -> vm::Result<Gas> {
+	if *size == 0 {
 		return Ok(Gas::from(0));
 	}
 
-	Gas::from_u256(overflowing!(offset.overflowing_add(*size)))
+	Gas::from_u256(overflowing!(integer_to_u256(offset).overflowing_add(integer_to_u256(size))))
 }
 
 #[inline]

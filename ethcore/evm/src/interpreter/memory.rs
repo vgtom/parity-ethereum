@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity Ethereum.  If not, see <http://www.gnu.org/licenses/>.
 
-use ethereum_types::U256;
+use rug::{Integer, integer::Order};
 use vm::ReturnData;
 
 const MAX_RETURN_WASTE_BYTES: usize = 16384;
@@ -27,19 +27,21 @@ pub trait Memory {
 	/// Resize the memory only if its smaller
 	fn expand(&mut self, new_size: usize);
 	/// Write single byte to memory
-	fn write_byte(&mut self, offset: U256, value: U256);
-	/// Write a word to memory. Does not resize memory!
-	fn write(&mut self, offset: U256, value: U256);
-	/// Read a word from memory
-	fn read(&self, offset: U256) -> U256;
-	/// Write slice of bytes to memory. Does not resize memory!
-	fn write_slice(&mut self, offset: U256, &[u8]);
+	fn write_byte(&mut self, offset: usize, value: u8);
+	/// Writes a 256-bit word to memory by truncating the given `Integer`. Panics if there is less
+	/// than 32 bytes after `offset`.
+	fn write(&mut self, offset: usize, value: Integer);
+	/// Reads a 256-bit word from memory as an `Integer`.
+	fn read(&self, offset: usize) -> Integer;
+	/// Writes a slice of bytes to memory. Panics if there is not enough bytes after `offset` to
+	/// store the given slice.
+	fn write_slice(&mut self, offset: usize, &[u8]);
 	/// Retrieve part of the memory between offset and offset + size
-	fn read_slice(&self, offset: U256, size: U256) -> &[u8];
+	fn read_slice(&self, offset: usize, size: usize) -> &[u8];
 	/// Retrieve writeable part of memory
-	fn writeable_slice(&mut self, offset: U256, size: U256) -> &mut[u8];
+	fn writeable_slice(&mut self, offset: usize, size: usize) -> &mut[u8];
 	/// Convert memory into return data.
-	fn into_return_data(self, offset: U256, size: U256) -> ReturnData;
+	fn into_return_data(self, offset: usize, size: usize) -> ReturnData;
 }
 
 /// Checks whether offset and size is valid memory range
@@ -54,47 +56,47 @@ impl Memory for Vec<u8> {
 		self.len()
 	}
 
-	fn read_slice(&self, init_off_u: U256, init_size_u: U256) -> &[u8] {
-		let off = init_off_u.low_u64() as usize;
-		let size = init_size_u.low_u64() as usize;
-		if !is_valid_range(off, size) {
+	fn read_slice(&self, offset: usize, size: usize) -> &[u8] {
+		if !is_valid_range(offset, size) {
 			&self[0..0]
 		} else {
-			&self[off..off+size]
+			&self[offset..offset + size]
 		}
 	}
 
-	fn read(&self, offset: U256) -> U256 {
-		let off = offset.low_u64() as usize;
-		U256::from(&self[off..off+32])
+	fn read(&self, offset: usize) -> Integer {
+		Integer::from_digits(&self[offset..offset + 32], Order::MsfLe)
 	}
 
-	fn writeable_slice(&mut self, offset: U256, size: U256) -> &mut [u8] {
-		let off = offset.low_u64() as usize;
-		let s = size.low_u64() as usize;
-		if !is_valid_range(off, s) {
+	fn writeable_slice(&mut self, offset: usize, size: usize) -> &mut [u8] {
+		if !is_valid_range(offset, size) {
 			&mut self[0..0]
 		} else {
-			&mut self[off..off+s]
+			&mut self[offset..offset + size]
 		}
 	}
 
-	fn write_slice(&mut self, offset: U256, slice: &[u8]) {
+	fn write_slice(&mut self, offset: usize, slice: &[u8]) {
 		if !slice.is_empty() {
-			let off = offset.low_u64() as usize;
-			self[off..off+slice.len()].copy_from_slice(slice);
+			self[offset..offset + slice.len()].copy_from_slice(slice);
 		}
 	}
 
-	fn write(&mut self, offset: U256, value: U256) {
-		let off = offset.low_u64() as usize;
-		value.to_big_endian(&mut self[off..off+32]);
+	fn write(&mut self, offset: usize, value: Integer) {
+		const SIZE: usize = 32;
+		// Take the low 32 bytes and write them out to memory in big-endian order.
+		let digits = value.keep_bits(SIZE as u32 * 8).to_digits::<u8>(Order::MsfBe);
+		let len = digits.len();
+		let nel = SIZE - len;
+		self[offset + nel..offset + SIZE].copy_from_slice(digits.as_slice());
+		if nel > 0 {
+			// Fill out the leading zeros.
+			self[offset..offset + nel].copy_from_slice(vec![0; nel].as_slice())
+		}
 	}
 
-	fn write_byte(&mut self, offset: U256, value: U256) {
-		let off = offset.low_u64() as usize;
-		let val = value.low_u64() as u64;
-		self[off] = val as u8;
+	fn write_byte(&mut self, offset: usize, value: u8) {
+		self[offset] = value;
 	}
 
 	fn resize(&mut self, new_size: usize) {
@@ -107,30 +109,28 @@ impl Memory for Vec<u8> {
 		}
 	}
 
-	fn into_return_data(mut self, offset: U256, size: U256) -> ReturnData {
-		let mut offset = offset.low_u64() as usize;
-		let size = size.low_u64() as usize;
-
+	fn into_return_data(mut self, offset: usize, size: usize) -> ReturnData {
 		if !is_valid_range(offset, size) {
 			return ReturnData::empty();
 		}
-
-		if self.len() - size > MAX_RETURN_WASTE_BYTES {
+		let corrected_offset = if self.len() - size > MAX_RETURN_WASTE_BYTES {
 			if offset == 0 {
 				self.truncate(size);
 				self.shrink_to_fit();
 			} else {
-				self = self[offset..(offset + size)].to_vec();
-				offset = 0;
+				self = self[offset..offset + size].to_vec();
 			}
-		}
-		ReturnData::new(self, offset, size)
+			0
+		} else {
+			offset
+		};
+		ReturnData::new(self, corrected_offset, size)
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use ethereum_types::U256;
+	use rug::Integer;
 	use super::Memory;
 
 	#[test]
@@ -140,10 +140,10 @@ mod tests {
 		mem.resize(0x80 + 32);
 
 		// when
-		mem.write(U256::from(0x80), U256::from(0xabcdef));
+		mem.write(0x80, Integer::from(0xabcdef));
 
 		// then
-		assert_eq!(mem.read(U256::from(0x80)), U256::from(0xabcdef));
+		assert_eq!(mem.read(0x80), Integer::from(0xabcdef));
 	}
 
 	#[test]
@@ -153,12 +153,12 @@ mod tests {
 		mem.resize(32);
 
 		// when
-		mem.write_byte(U256::from(0x1d), U256::from(0xab));
-		mem.write_byte(U256::from(0x1e), U256::from(0xcd));
-		mem.write_byte(U256::from(0x1f), U256::from(0xef));
+		mem.write_byte(0x1d, 0xab);
+		mem.write_byte(0x1e, 0xcd);
+		mem.write_byte(0x1f, 0xef);
 
 		// then
-		assert_eq!(mem.read(U256::from(0x00)), U256::from(0xabcdef));
+		assert_eq!(mem.read(0x00), Integer::from(0xabcdef));
 	}
 
 	#[test]
@@ -168,23 +168,23 @@ mod tests {
 
 		{
 			let slice = "abcdefghijklmnopqrstuvwxyz012345".as_bytes();
-			mem.write_slice(U256::from(0), slice);
+			mem.write_slice(0, slice);
 
-			assert_eq!(mem.read_slice(U256::from(0), U256::from(32)), slice);
+			assert_eq!(mem.read_slice(0, 32), slice);
 		}
 
 		// write again
 		{
 			let slice = "67890".as_bytes();
-			mem.write_slice(U256::from(0x1), slice);
+			mem.write_slice(1, slice);
 
-			assert_eq!(mem.read_slice(U256::from(0), U256::from(7)), "a67890g".as_bytes());
+			assert_eq!(mem.read_slice(0, 7), "a67890g".as_bytes());
 		}
 
 		// write empty slice out of bounds
 		{
 			let slice = [];
-			mem.write_slice(U256::from(0x1000), &slice);
+			mem.write_slice(0x1000, &slice);
 			assert_eq!(mem.size(), 32);
 		}
 	}
