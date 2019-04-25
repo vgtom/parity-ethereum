@@ -198,18 +198,12 @@ fn prove_initial(contract_address: Address, header: &Header, caller: &Call) -> R
 
 impl ValidatorSafeContract {
 	fn transact(&self, data: Bytes, nonce: U256) -> Result<(), ::error::Error> {
-		let client = self.client.read().as_ref()
-			.and_then(Weak::upgrade)
-			.ok_or_else(|| "No client!")?;
+		let client = self.client.read().as_ref().and_then(Weak::upgrade).ok_or("No client!")?;
+		let full_client = client.as_full_client().ok_or("No full client!")?;
 
-		match client.as_full_client() {
-			Some(c) => {
-				match c.transact(Action::Call(self.contract_address), data, None, Some(0.into()), Some(nonce)) {
-					Ok(()) | Err(transaction::Error::AlreadyImported) => Ok(()),
-					Err(e) => Err(e)?,
-				}
-			},
-			None => Err("No full client!".into()),
+		match full_client.transact(Action::Call(self.contract_address), data, None, Some(0.into()), Some(nonce)) {
+			Ok(()) | Err(transaction::Error::AlreadyImported) => Ok(()),
+			Err(e) => Err(e)?,
 		}
 	}
 
