@@ -1992,6 +1992,7 @@ mod tests {
 			calibrate: false,
 			inner: AtomicUsize::new(::std::usize::MAX),
 			duration: AtomicU16::new(1),
+			next_duration: AtomicU16::new(1),
 		};
 		step.increment();
 	}
@@ -2006,6 +2007,7 @@ mod tests {
 			calibrate: false,
 			inner: AtomicUsize::new(::std::usize::MAX),
 			duration: AtomicU16::new(1),
+			next_duration: AtomicU16::new(1),
 		};
 		step.duration_remaining();
 	}
