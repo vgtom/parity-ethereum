@@ -166,7 +166,7 @@ impl Step {
 			.checked_add(1)
 			.and_then(|ctr| ctr.checked_mul(self.duration.load(AtomicOrdering::SeqCst) as u64))
 			.map(Duration::from_secs);
-
+		trace!(target: "engine", "expected_seconds {:?}", expected_seconds);
 		match expected_seconds {
 			Some(step_end) if step_end > now => step_end - now,
 			Some(_) => Duration::from_secs(0),
@@ -191,12 +191,21 @@ impl Step {
 			panic!("step counter is too high: {}", usize::MAX);
 		}
 		// Set the duration of this step.
-		self.duration.store(self.next_duration.load(AtomicOrdering::SeqCst), AtomicOrdering::SeqCst);
+		let cur_dur = self.duration.load(AtomicOrdering::SeqCst);
+		if cur_dur == self.duration.compare_and_swap(
+			cur_dur,
+			self.next_duration.load(AtomicOrdering::SeqCst),
+			AtomicOrdering::SeqCst
+		) {
+			// The step duration has been updated. Calibrate the new step now.
+			self.calibrate();
+		}
 	}
 
 	fn calibrate(&self) {
 		if self.calibrate {
 			let new_step = unix_now().as_secs() / (self.duration.load(AtomicOrdering::SeqCst) as u64);
+			trace!(target: "engine", "calibrating new step in {}", new_step);
 			self.inner.store(new_step as usize, AtomicOrdering::SeqCst);
 		}
 	}
@@ -969,8 +978,11 @@ impl IoHandler<()> for TransitionHandler {
 				}
 			}
 
-			let next_run_at = AsMillis::as_millis(&self.step.inner.duration_remaining()) >> 2;
-			io.register_timer_once(ENGINE_TIMEOUT_TOKEN, Duration::from_millis(next_run_at))
+			let next_run_at = Duration::from_millis(
+				AsMillis::as_millis(&self.step.inner.duration_remaining()) >> 2
+			);
+			trace!(target: "engine", "Next run at {:?}", next_run_at);
+			io.register_timer_once(ENGINE_TIMEOUT_TOKEN, next_run_at)
 				.unwrap_or_else(|e| warn!(target: "engine", "Failed to restart consensus step timer: {}.", e))
 		}
 	}
