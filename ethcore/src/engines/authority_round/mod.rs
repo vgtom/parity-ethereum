@@ -156,6 +156,10 @@ struct Step {
 	duration: AtomicU16,
 	/// Duration of the next step.
 	next_duration: AtomicU16,
+	/// The time of the start of the first step after the last change of step duration, in seconds.
+	starting_sec: AtomicUsize,
+	/// The number of the first step after the last change of step duration.
+	starting_step: AtomicUsize,
 }
 
 impl Step {
@@ -163,10 +167,11 @@ impl Step {
 	fn duration_remaining(&self) -> Duration {
 		let now = unix_now();
 		let expected_seconds = self.load()
-			.checked_add(1)
-			.and_then(|ctr| ctr.checked_mul(self.duration.load(AtomicOrdering::SeqCst) as u64))
+			.checked_sub((self.starting_step.load(AtomicOrdering::SeqCst) as u64))
+			.and_then(|x| x.checked_add(1))
+			.and_then(|x| x.checked_mul(self.duration.load(AtomicOrdering::SeqCst) as u64))
+			.and_then(|x| x.checked_add(self.starting_sec.load(AtomicOrdering::SeqCst) as u64))
 			.map(Duration::from_secs);
-		trace!(target: "engine", "expected_seconds {:?}", expected_seconds);
 		match expected_seconds {
 			Some(step_end) if step_end > now => step_end - now,
 			Some(_) => Duration::from_secs(0),
@@ -186,26 +191,37 @@ impl Step {
 		// fetch_add won't panic on overflow but will rather wrap
 		// around, leading to zero as the step counter, which might
 		// lead to unexpected situations, so it's better to shut down.
-		if self.inner.fetch_add(1, AtomicOrdering::SeqCst) == usize::MAX {
+		let last_step = self.inner.fetch_add(1, AtomicOrdering::SeqCst);
+		if last_step == usize::MAX {
 			error!(target: "engine", "Step counter is too high: {}, aborting", usize::MAX);
 			panic!("step counter is too high: {}", usize::MAX);
 		}
-		// Set the duration of this step.
-		let cur_dur = self.duration.load(AtomicOrdering::SeqCst);
-		if cur_dur == self.duration.compare_and_swap(
-			cur_dur,
-			self.next_duration.load(AtomicOrdering::SeqCst),
-			AtomicOrdering::SeqCst
-		) {
-			// The step duration has been updated. Calibrate the new step now.
-			self.calibrate();
+		// Set the duration of the next step.
+		let next_dur = self.next_duration.load(AtomicOrdering::SeqCst);
+		let cur_dur = self.duration.swap(next_dur, AtomicOrdering::SeqCst);
+		if cur_dur != next_dur {
+			let starting_sec = unix_now().as_secs() as usize;
+			let starting_step = (last_step + 1) as usize;
+			self.starting_sec.store(starting_sec, AtomicOrdering::SeqCst);
+			self.starting_step.store(starting_step, AtomicOrdering::SeqCst);
+			let next_step = (
+				(unix_now().as_secs() as usize - starting_sec) /
+					(self.duration.load(AtomicOrdering::SeqCst) as usize)
+			) +	starting_step;
+			self.inner.store(next_step, AtomicOrdering::SeqCst);
+			trace!(target: "engine", "Step duration updated; next step {} calibrated", next_step);
 		}
 	}
 
 	fn calibrate(&self) {
 		if self.calibrate {
-			let new_step = unix_now().as_secs() / (self.duration.load(AtomicOrdering::SeqCst) as u64);
-			trace!(target: "engine", "calibrating new step in {}", new_step);
+			let starting_sec = self.starting_sec.load(AtomicOrdering::SeqCst);
+			let starting_step = self.starting_step.load(AtomicOrdering::SeqCst);
+			let new_step = (
+				(unix_now().as_secs() as usize - starting_sec) /
+					(self.duration.load(AtomicOrdering::SeqCst) as usize)
+			) +	starting_step + 1;
+			trace!(target: "engine", "calibrating new step {}", new_step);
 			self.inner.store(new_step as usize, AtomicOrdering::SeqCst);
 		}
 	}
@@ -722,6 +738,8 @@ impl AuthorityRound {
 						calibrate: our_params.start_step.is_none(),
 						duration: AtomicU16::new(duration),
 						next_duration: AtomicU16::new(duration),
+						starting_sec: AtomicUsize::new(unix_now().as_secs() as usize),
+						starting_step: AtomicUsize::new(initial_step as usize),
 					},
 					can_propose: AtomicBool::new(true),
 				}),
@@ -981,7 +999,6 @@ impl IoHandler<()> for TransitionHandler {
 			let next_run_at = Duration::from_millis(
 				AsMillis::as_millis(&self.step.inner.duration_remaining()) >> 2
 			);
-			trace!(target: "engine", "Next run at {:?}", next_run_at);
 			io.register_timer_once(ENGINE_TIMEOUT_TOKEN, next_run_at)
 				.unwrap_or_else(|e| warn!(target: "engine", "Failed to restart consensus step timer: {}.", e))
 		}
