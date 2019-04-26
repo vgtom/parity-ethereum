@@ -167,7 +167,7 @@ impl Step {
 	fn duration_remaining(&self) -> Duration {
 		let now = unix_now();
 		let expected_seconds = self.load()
-			.checked_sub((self.starting_step.load(AtomicOrdering::SeqCst) as u64))
+			.checked_sub(self.starting_step.load(AtomicOrdering::SeqCst) as u64)
 			.and_then(|x| x.checked_add(1))
 			.and_then(|x| x.checked_mul(self.duration.load(AtomicOrdering::SeqCst) as u64))
 			.and_then(|x| x.checked_add(self.starting_sec.load(AtomicOrdering::SeqCst) as u64))
@@ -177,8 +177,8 @@ impl Step {
 			Some(_) => Duration::from_secs(0),
 			None => {
 				let ctr = self.load();
-				error!(target: "engine", "Step counter is too high: {}, aborting", ctr);
-				panic!("step counter is too high: {}", ctr)
+				error!(target: "engine", "Step counter under- or overflow: {}, aborting", ctr);
+				panic!("step counter under- or overflow: {}", ctr)
 			},
 		}
 	}
@@ -191,17 +191,20 @@ impl Step {
 		// fetch_add won't panic on overflow but will rather wrap
 		// around, leading to zero as the step counter, which might
 		// lead to unexpected situations, so it's better to shut down.
-		let last_step = self.inner.fetch_add(1, AtomicOrdering::SeqCst);
-		if last_step == usize::MAX {
+		let prev_step = self.inner.fetch_add(1, AtomicOrdering::SeqCst);
+		if prev_step == usize::MAX {
 			error!(target: "engine", "Step counter is too high: {}, aborting", usize::MAX);
 			panic!("step counter is too high: {}", usize::MAX);
 		}
 		// Set the duration of the next step.
 		let next_dur = self.next_duration.load(AtomicOrdering::SeqCst);
-		let cur_dur = self.duration.swap(next_dur, AtomicOrdering::SeqCst);
-		if cur_dur != next_dur {
-			let starting_sec = unix_now().as_secs() as usize;
-			let starting_step = (last_step + 1) as usize;
+		let prev_dur = self.duration.swap(next_dur, AtomicOrdering::SeqCst);
+		if prev_dur != next_dur {
+			let prev_starting_sec = self.starting_sec.load(AtomicOrdering::SeqCst);
+			let prev_starting_step = self.starting_step.load(AtomicOrdering::SeqCst);
+			let steps_elapsed = prev_step - prev_starting_step;
+			let starting_sec = prev_starting_sec + (steps_elapsed * prev_dur as usize);
+			let starting_step = (prev_step + 1) as usize;
 			self.starting_sec.store(starting_sec, AtomicOrdering::SeqCst);
 			self.starting_step.store(starting_step, AtomicOrdering::SeqCst);
 			let next_step = (
