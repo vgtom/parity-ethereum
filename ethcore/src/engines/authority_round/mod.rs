@@ -2022,6 +2022,8 @@ mod tests {
 			inner: AtomicUsize::new(::std::usize::MAX),
 			duration: AtomicU16::new(1),
 			next_duration: AtomicU16::new(1),
+			starting_sec: AtomicUsize::new(::std::usize::MAX),
+			starting_step: AtomicUsize::new(::std::usize::MAX),
 		};
 		step.increment();
 	}
@@ -2037,6 +2039,8 @@ mod tests {
 			inner: AtomicUsize::new(::std::usize::MAX),
 			duration: AtomicU16::new(1),
 			next_duration: AtomicU16::new(1),
+			starting_sec: AtomicUsize::new(::std::usize::MAX),
+			starting_step: AtomicUsize::new(::std::usize::MAX),
 		};
 		step.duration_remaining();
 	}
