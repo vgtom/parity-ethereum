@@ -208,7 +208,7 @@ impl Step {
 			self.starting_sec.store(starting_sec, AtomicOrdering::SeqCst);
 			self.starting_step.store(next_step, AtomicOrdering::SeqCst);
 			self.inner.store(next_step, AtomicOrdering::SeqCst);
-			trace!(target: "engine", "Step duration updated at step {}", next_step);
+			trace!(target: "engine", "Step duration updated to {} at step {}", next_dur, next_step);
 		}
 	}
 
@@ -724,18 +724,17 @@ impl AuthorityRound {
 			panic!("authority_round: step duration cannot be 0");
 		}
 		let should_timeout = our_params.start_step.is_none();
-		let initial_step = our_params.start_step.unwrap_or_else(|| (unix_now().as_secs() / (duration as u64)));
 		let engine = Arc::new(
 			AuthorityRound {
 				transition_service: IoService::<()>::start()?,
 				step: Arc::new(PermissionedStep {
 					inner: Step {
-						inner: AtomicU64::new(initial_step),
+						inner: AtomicU64::new(0),
 						calibrate: our_params.start_step.is_none(),
                         current_duration: AtomicU16::new(duration),
 						durations: our_params.step_durations.clone(),
 						starting_sec: AtomicU64::new(unix_now().as_secs()),
-						starting_step: AtomicU64::new(initial_step),
+						starting_step: AtomicU64::new(0),
 					},
 					can_propose: AtomicBool::new(true),
 				}),
