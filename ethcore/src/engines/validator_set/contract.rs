@@ -138,6 +138,7 @@ mod tests {
 	use std::sync::Arc;
 	use rustc_hex::FromHex;
 	use hash::keccak;
+	use ethabi::FunctionOutputDecoder;
 	use ethereum_types::{H520, Address};
 	use bytes::ToPretty;
 	use rlp::encode;
@@ -210,6 +211,9 @@ mod tests {
 		client.engine().step();
 		client.engine().step();
 		assert_eq!(client.chain_info().best_block_number, 2);
+		let (data, decoder) = super::validator_report::functions::malice_reported_for_block::call(v1, 1);
+		let reported_enc = client.call_contract(BlockId::Latest, validator_contract, data).expect("call failed");
+		assert_ne!(Vec::<Address>::new(), decoder.decode(&reported_enc).expect("decoding failed"));
 
 		// Check if misbehaving validator was removed.
 		client.transact_contract(Default::default(), Default::default()).unwrap();
