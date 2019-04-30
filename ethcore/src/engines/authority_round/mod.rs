@@ -18,7 +18,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::{cmp, fmt};
-use std::iter::FromIterator;
+use std::iter::{self, FromIterator};
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU16, AtomicU64, AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Weak, Arc};
@@ -115,11 +115,7 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 			step_duration_usize as u16
 		};
 		let step_durations: BTreeMap<u64, u16> = match p.step_duration {
-			StepDuration::Single(u) => {
-				let mut durs: BTreeMap<u64, u16> = BTreeMap::new();
-				durs.insert(0, map_step_duration(u));
-				durs
-			}
+			StepDuration::Single(u) => iter::once((0, map_step_duration(u))).collect(),
 			StepDuration::Transitions(tr) => {
 				tr.into_iter().map(|(blknum, u)| (blknum.into(), map_step_duration(u))).collect()
 			}
@@ -153,8 +149,8 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 struct Step {
 	calibrate: bool, // whether calibration is enabled.
 	inner: AtomicU64,
-    /// Duration of the current step.
-    current_duration: AtomicU16,
+	/// Duration of the current step.
+	current_duration: AtomicU16,
 	/// Planned durations of steps.
 	durations: BTreeMap<u64, u16>,
 	/// The time of the start of the first step after the last change of step duration, in seconds.
@@ -731,7 +727,7 @@ impl AuthorityRound {
 					inner: Step {
 						inner: AtomicU64::new(0),
 						calibrate: our_params.start_step.is_none(),
-                        current_duration: AtomicU16::new(duration),
+						current_duration: AtomicU16::new(duration),
 						durations: our_params.step_durations.clone(),
 						starting_sec: AtomicU64::new(unix_now().as_secs()),
 						starting_step: AtomicU64::new(0),
