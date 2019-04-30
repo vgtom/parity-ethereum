@@ -20,9 +20,10 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::{cmp, fmt};
 use std::iter::FromIterator;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU16, AtomicUsize, AtomicBool, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicU16, AtomicU64, AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Weak, Arc};
 use std::time::{UNIX_EPOCH, SystemTime, Duration};
+use std::u64;
 
 use block::*;
 use bytes::Bytes;
@@ -63,11 +64,11 @@ pub type RandomnessPhaseError = randomness::PhaseError;
 pub struct AuthorityRoundParams {
 	/// A map defining intervals of blocks with the given times (in seconds) to wait before next
 	/// block or authority switching. The keys in the map are numbers of starting blocks of those
-	/// periods.
+	/// periods. The entry at `0` should be defined.
 	///
 	/// Wait times (durations) are deliberately typed as `u16` since larger values lead to slow
 	/// block issuance.
-	pub step_duration: BTreeMap<u64, u16>,
+	pub step_durations: BTreeMap<u64, u16>,
 	/// Starting step,
 	pub start_step: Option<u64>,
 	/// Valid validators.
@@ -113,7 +114,7 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 			}
 			step_duration_usize as u16
 		};
-		let step_duration: BTreeMap<u64, u16> = match p.step_duration {
+		let step_durations: BTreeMap<u64, u16> = match p.step_duration {
 			StepDuration::Single(u) => {
 				let mut durs: BTreeMap<u64, u16> = BTreeMap::new();
 				durs.insert(0, map_step_duration(u));
@@ -124,7 +125,7 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 			}
 		};
 		AuthorityRoundParams {
-			step_duration,
+			step_durations,
 			validators: new_validator_set(p.validators),
 			start_step: p.start_step.map(Into::into),
 			validate_score_transition: p.validate_score_transition.map_or(0, Into::into),
@@ -151,25 +152,25 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 #[derive(Debug)]
 struct Step {
 	calibrate: bool, // whether calibration is enabled.
-	inner: AtomicUsize,
-	/// Duration of this step.
-	duration: AtomicU16,
-	/// Duration of the next step.
-	next_duration: AtomicU16,
+	inner: AtomicU64,
+    /// Duration of the current step.
+    current_duration: AtomicU16,
+	/// Planned durations of steps.
+	durations: BTreeMap<u64, u16>,
 	/// The time of the start of the first step after the last change of step duration, in seconds.
-	starting_sec: AtomicUsize,
+	starting_sec: AtomicU64,
 	/// The number of the first step after the last change of step duration.
-	starting_step: AtomicUsize,
+	starting_step: AtomicU64,
 }
 
 impl Step {
-	fn load(&self) -> u64 { self.inner.load(AtomicOrdering::SeqCst) as u64 }
+	fn load(&self) -> u64 { self.inner.load(AtomicOrdering::SeqCst) }
 	fn duration_remaining(&self) -> Duration {
 		let now = unix_now();
 		let expected_seconds = self.load()
 			.checked_sub(self.starting_step.load(AtomicOrdering::SeqCst) as u64)
 			.and_then(|x| x.checked_add(1))
-			.and_then(|x| x.checked_mul(self.duration.load(AtomicOrdering::SeqCst) as u64))
+			.and_then(|x| x.checked_mul(self.current_duration.load(AtomicOrdering::SeqCst) as u64))
 			.and_then(|x| x.checked_add(self.starting_sec.load(AtomicOrdering::SeqCst) as u64))
 			.map(Duration::from_secs);
 		match expected_seconds {
@@ -192,27 +193,22 @@ impl Step {
 		// around, leading to zero as the step counter, which might
 		// lead to unexpected situations, so it's better to shut down.
 		let prev_step = self.inner.fetch_add(1, AtomicOrdering::SeqCst);
-		if prev_step == usize::MAX {
+		if prev_step == u64::MAX {
 			error!(target: "engine", "Step counter is too high: {}, aborting", usize::MAX);
 			panic!("step counter is too high: {}", usize::MAX);
 		}
-		// Set the duration of the next step.
-		let next_dur = self.next_duration.load(AtomicOrdering::SeqCst);
-		let prev_dur = self.duration.swap(next_dur, AtomicOrdering::SeqCst);
-		if prev_dur != next_dur {
+		let next_step = prev_step + 1;
+		if let Some(&next_dur) = self.durations.get(&next_step) {
+			let prev_dur = *self.durations.range(0 .. next_step).last().expect("step duration map is empty").1;
 			let prev_starting_sec = self.starting_sec.load(AtomicOrdering::SeqCst);
 			let prev_starting_step = self.starting_step.load(AtomicOrdering::SeqCst);
 			let steps_elapsed = prev_step - prev_starting_step;
-			let starting_sec = prev_starting_sec + (steps_elapsed * prev_dur as usize);
-			let starting_step = (prev_step + 1) as usize;
+			let starting_sec = prev_starting_sec + (steps_elapsed * prev_dur as u64);
+			self.current_duration.store(next_dur, AtomicOrdering::SeqCst);
 			self.starting_sec.store(starting_sec, AtomicOrdering::SeqCst);
-			self.starting_step.store(starting_step, AtomicOrdering::SeqCst);
-			let next_step = (
-				(unix_now().as_secs() as usize - starting_sec) /
-					(self.duration.load(AtomicOrdering::SeqCst) as usize)
-			) +	starting_step;
+			self.starting_step.store(next_step, AtomicOrdering::SeqCst);
 			self.inner.store(next_step, AtomicOrdering::SeqCst);
-			trace!(target: "engine", "Step duration updated; next step {} calibrated", next_step);
+			trace!(target: "engine", "Step duration updated at step {}", next_step);
 		}
 	}
 
@@ -220,12 +216,12 @@ impl Step {
 		if self.calibrate {
 			let starting_sec = self.starting_sec.load(AtomicOrdering::SeqCst);
 			let starting_step = self.starting_step.load(AtomicOrdering::SeqCst);
-			let new_step = (
-				(unix_now().as_secs() as usize - starting_sec) /
-					(self.duration.load(AtomicOrdering::SeqCst) as usize)
+			let step = (
+				(unix_now().as_secs() - starting_sec) /
+					(self.current_duration.load(AtomicOrdering::SeqCst) as u64)
 			) +	starting_step + 1;
-			trace!(target: "engine", "calibrating new step {}", new_step);
-			self.inner.store(new_step as usize, AtomicOrdering::SeqCst);
+			trace!(target: "engine", "calibrating step {}", step);
+			self.inner.store(step, AtomicOrdering::SeqCst);
 		}
 	}
 
@@ -246,7 +242,7 @@ impl Step {
 			Err(None)
 		// wait a bit for blocks in near future
 		} else if given > current {
-			let d = self.duration.load(AtomicOrdering::SeqCst) as u64;
+			let d = self.current_duration.load(AtomicOrdering::SeqCst) as u64;
 			Err(Some(OutOfBounds {
 				min: None,
 				max: Some(d * current),
@@ -493,9 +489,6 @@ pub struct AuthorityRound {
 	machine: EthereumMachine,
 	/// If set, enables random number contract integration.
 	randomness_contract_address: Option<Address>,
-	/// The correspondence between block numbers and step durations. The entry at 0 should be
-	/// defined.
-	step_duration: BTreeMap<u64, u16>,
 }
 
 // header-chain validator.
@@ -723,11 +716,11 @@ impl<'a, A: ?Sized, B> Deref for CowLike<'a, A, B> where B: AsRef<A> {
 impl AuthorityRound {
 	/// Create a new instance of AuthorityRound engine.
 	pub fn new(our_params: AuthorityRoundParams, machine: EthereumMachine) -> Result<Arc<Self>, Error> {
-		let duration = *our_params.step_duration.get(&0).unwrap_or_else(|| {
+		let duration = *our_params.step_durations.get(&0).unwrap_or_else(|| {
 			error!(target: "engine", "Authority Round step 0 duration is undefined, aborting");
 			panic!("authority_round: step 0 duration is undefined")
 		});
-		if our_params.step_duration.values().any(|v| *v == 0) {
+		if our_params.step_durations.values().any(|v| *v == 0) {
 			panic!("authority_round: step duration cannot be 0");
 		}
 		let should_timeout = our_params.start_step.is_none();
@@ -737,12 +730,12 @@ impl AuthorityRound {
 				transition_service: IoService::<()>::start()?,
 				step: Arc::new(PermissionedStep {
 					inner: Step {
-						inner: AtomicUsize::new(initial_step as usize),
+						inner: AtomicU64::new(initial_step),
 						calibrate: our_params.start_step.is_none(),
-						duration: AtomicU16::new(duration),
-						next_duration: AtomicU16::new(duration),
-						starting_sec: AtomicUsize::new(unix_now().as_secs() as usize),
-						starting_step: AtomicUsize::new(initial_step as usize),
+                        current_duration: AtomicU16::new(duration),
+						durations: our_params.step_durations.clone(),
+						starting_sec: AtomicU64::new(unix_now().as_secs()),
+						starting_step: AtomicU64::new(initial_step),
 					},
 					can_propose: AtomicBool::new(true),
 				}),
@@ -764,7 +757,6 @@ impl AuthorityRound {
 				strict_empty_steps_transition: our_params.strict_empty_steps_transition,
 				machine: machine,
 				randomness_contract_address: our_params.randomness_contract_address,
-				step_duration: our_params.step_duration,
 			});
 
 		// Do not initialize timeouts for tests.
@@ -949,20 +941,6 @@ impl AuthorityRound {
 
 		let finalized = epoch_manager.finality_checker.push_hash(chain_head.hash(), vec![*chain_head.author()]);
 		finalized.unwrap_or_default()
-	}
-
-	/// Schedules a step duration update at the next step after `current_block_num`.
-	fn update_step_duration(&self, current_block_num: u64) {
-		let next_block_num = current_block_num + 1;
-		if let Some((_, dur)) = self.step_duration.range(0 ..= next_block_num).last() {
-			// Change the duration of the next engine step.
-			trace!(target: "engine", "Setting the step duration of the block #{} to {} seconds",
-				   next_block_num, dur);
-			self.step.inner.next_duration.store(*dur, AtomicOrdering::SeqCst);
-		} else {
-			warn!(target: "engine", "Cannot find duration for block #{}; leaving it unchanged",
-				  next_block_num);
-		}
 	}
 }
 
@@ -1256,9 +1234,8 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		self.validators.on_epoch_begin(first, &header, &mut call)
 	}
 
-	/// Change the next step duration if necessary and apply the block reward on finalisation of the block.
+	/// Applies the block reward on finalisation of the block.
 	fn on_close_block(&self, block: &mut ExecutedBlock) -> Result<(), Error> {
-		self.update_step_duration(block.header().number());
 		let mut beneficiaries = Vec::new();
 		if block.header().number() >= self.empty_steps_transition {
 			let empty_steps = if block.header().seal().is_empty() {
@@ -1695,7 +1672,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 mod tests {
 	use std::collections::BTreeMap;
 	use std::sync::Arc;
-	use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+	use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering as AtomicOrdering};
 	use hash::keccak;
 	use accounts::AccountProvider;
 	use ethereum_types::{Address, H520, H256, U256};
@@ -1718,7 +1695,7 @@ mod tests {
 		F: FnOnce(&mut AuthorityRoundParams),
 	{
 		let mut params = AuthorityRoundParams {
-			step_duration: [(0, 1)].to_vec().into_iter().collect(),
+			step_durations: [(0, 1)].to_vec().into_iter().collect(),
 			start_step: Some(1),
 			validators: Box::new(TestSet::default()),
 			validate_score_transition: 0,
@@ -2022,28 +1999,28 @@ mod tests {
 
 		let step = Step {
 			calibrate: false,
-			inner: AtomicUsize::new(::std::usize::MAX),
-			duration: AtomicU16::new(1),
-			next_duration: AtomicU16::new(1),
-			starting_sec: AtomicUsize::new(::std::usize::MAX),
-			starting_step: AtomicUsize::new(::std::usize::MAX),
+			inner: AtomicU64::new(::std::u64::MAX),
+			current_duration: AtomicU16::new(1),
+			durations: [(0, 1)].to_vec().into_iter().collect(),
+			starting_sec: AtomicU64::new(::std::u64::MAX),
+			starting_step: AtomicU64::new(::std::u64::MAX),
 		};
 		step.increment();
 	}
 
 	#[test]
-	#[should_panic(expected="counter is too high")]
+	#[should_panic(expected="step counter under- or overflow")]
 	fn test_counter_duration_remaining_too_high() {
 		use super::Step;
 		use std::sync::atomic::AtomicU16;
 
 		let step = Step {
 			calibrate: false,
-			inner: AtomicUsize::new(::std::usize::MAX),
-			duration: AtomicU16::new(1),
-			next_duration: AtomicU16::new(1),
-			starting_sec: AtomicUsize::new(::std::usize::MAX),
-			starting_step: AtomicUsize::new(::std::usize::MAX),
+			inner: AtomicU64::new(::std::u64::MAX),
+			current_duration: AtomicU16::new(1),
+			durations: [(0, 1)].to_vec().into_iter().collect(),
+			starting_sec: AtomicU64::new(::std::u64::MAX),
+			starting_step: AtomicU64::new(::std::u64::MAX),
 		};
 		step.duration_remaining();
 	}
@@ -2052,7 +2029,7 @@ mod tests {
 	#[should_panic(expected="authority_round: step duration cannot be 0")]
 	fn test_step_duration_zero() {
 		aura(|params| {
-			params.step_duration = [(0, 0)].to_vec().into_iter().collect();;
+			params.step_durations = [(0, 0)].to_vec().into_iter().collect();;
 		});
 	}
 
@@ -2444,7 +2421,7 @@ mod tests {
 	#[test]
 	fn test_empty_steps() {
 		let engine = aura(|p| {
-			p.step_duration = [(0, 4)].to_vec().into_iter().collect();
+			p.step_durations = [(0, 4)].to_vec().into_iter().collect();
 			p.empty_steps_transition = 0;
 			p.maximum_empty_steps = 0;
 		});
@@ -2478,7 +2455,7 @@ mod tests {
 		let (_spec, tap, accounts) = setup_empty_steps();
 		let engine = aura(|p| {
 			p.validators = Box::new(SimpleList::new(accounts.clone()));
-			p.step_duration = [(0, 4)].to_vec().into_iter().collect();
+			p.step_durations = [(0, 4)].to_vec().into_iter().collect();
 			p.empty_steps_transition = 0;
 			p.maximum_empty_steps = 0;
 		});
@@ -2515,7 +2492,7 @@ mod tests {
 		let (_spec, tap, accounts) = setup_empty_steps();
 		let engine = aura(|p| {
 			p.validators = Box::new(SimpleList::new(accounts.clone()));
-			p.step_duration = [(0, 4)].to_vec().into_iter().collect();
+			p.step_durations = [(0, 4)].to_vec().into_iter().collect();
 			p.empty_steps_transition = 0;
 			p.maximum_empty_steps = 0;
 		});
