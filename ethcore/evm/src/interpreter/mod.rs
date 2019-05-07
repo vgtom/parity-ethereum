@@ -29,6 +29,7 @@ use std::sync::Arc;
 use hash::keccak;
 use bytes::Bytes;
 use ethereum_types::{U256, H256, Address};
+use num_bigint::BigUint;
 use rug::{Integer, integer::Order};
 use vm::{
 	self, ActionParams, ParamsType, ActionValue, CallType, MessageCallResult,
@@ -60,6 +61,17 @@ const TWO_POW_64: U256 = U256([0, 0x1, 0, 0]); // 0x1 00000000 00000000
 const TWO_POW_96: U256 = U256([0, 0x100000000, 0, 0]); //0x1 00000000 00000000 00000000
 const TWO_POW_224: U256 = U256([0, 0, 0, 0x100000000]); //0x1 00000000 00000000 00000000 00000000 00000000 00000000 00000000
 const TWO_POW_248: U256 = U256([0, 0, 0, 0x100000000000000]); //0x1 00000000 00000000 00000000 00000000 00000000 00000000 00000000 000000
+
+fn to_biguint(x: U256) -> BigUint {
+	let mut bytes = [0u8; 32];
+	x.to_little_endian(&mut bytes);
+	BigUint::from_bytes_le(&bytes)
+}
+
+fn from_biguint(x: BigUint) -> U256 {
+	let bytes = x.to_bytes_le();
+	U256::from_little_endian(&bytes)
+}
 
 /// Abstraction over raw vector of Bytes. Easier state management of PC.
 struct CodeReader {
@@ -1009,7 +1021,13 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let c = self.stack.pop_back();
 
 				self.stack.push(if !c.is_zero() {
-					compute_rug_3(|a, b, c| (a + b) % c, a, b, c)
+					// compute_rug_3(|a, b, c| (a + b) % c, a, b, c)
+					let a_num = to_biguint(a);
+					let b_num = to_biguint(b);
+					let c_num = to_biguint(c);
+					let res = a_num + b_num;
+					let x = res % c_num;
+					from_biguint(x)
 				} else {
 					U256::zero()
 				});
@@ -1020,7 +1038,13 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let c = self.stack.pop_back();
 
 				self.stack.push(if !a.is_zero() && !b.is_zero() && !c.is_zero() {
-					compute_rug_3(|a, b, c| (a * b) % c, a, b, c)
+					// compute_rug_3(|a, b, c| (a * b) % c, a, b, c)
+					let a_num = to_biguint(a);
+					let b_num = to_biguint(b);
+					let c_num = to_biguint(c);
+					let res = a_num * b_num;
+					let x = res % c_num;
+					from_biguint(x)
 				} else {
 					U256::zero()
 				});
