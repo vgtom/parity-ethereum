@@ -28,6 +28,11 @@ contract TestList {
 		return validators;
 	}
 
+	function setValidators(address[] memory _validators) public {
+		validators = _validators;
+		emit InitiateChange(blockhash(block.number - 1), validators);
+	}
+
 	// Removes a validator from the list.
 	function reportMalicious(address validator, uint256 blockNum, bytes calldata) external {
 		maliceReported[keccak256(abi.encode(validator, blockNum))].push(msg.sender);
