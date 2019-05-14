@@ -83,6 +83,8 @@ pub struct ValidatorSafeContract {
 	validators: RwLock<MemoryLruCache<H256, SimpleList>>,
 	client: RwLock<Option<Weak<EngineClient>>>, // TODO [keorn]: remove
 	queued_reports: Mutex<VecDeque<(Address, u64, Vec<u8>)>>,
+	/// The block number where we resent the queued reports last time.
+	resent_reports_in_block: Mutex<u64>,
 }
 
 // first proof is just a state proof call of `getValidators` at header's state.
@@ -220,6 +222,7 @@ impl ValidatorSafeContract {
 			validators: RwLock::new(MemoryLruCache::new(MEMOIZE_CAPACITY)),
 			client: RwLock::new(None),
 			queued_reports: Mutex::new(VecDeque::new()),
+			resent_reports_in_block: Mutex::new(0),
 		}
 	}
 
@@ -341,62 +344,56 @@ impl ValidatorSet for ValidatorSafeContract {
 		let client = self.client.read().as_ref().and_then(Weak::upgrade).ok_or("No client!")?;
 		let client = client.as_full_client().ok_or("No full client!")?;
 
-		// TODO: Enable re-sending reports. Figure out why this makes the `reports_validators` test hang.
-		//
-		// let mut nonce = client.latest_nonce(address);
-		// debug!(target: "engine", "Checking for cached reports");
-		// for (address, block, data) in self.queued_reports.lock().iter() {
-		// 	debug!(target: "engine", "Trying to report");
-		// 	while match self.transact(data.clone(), nonce) {
-		// 		Ok(()) => false,
-		// 		Err(Error(ErrorKind::Transaction(transaction::Error::Old), _)) => true,
-		// 		Err(err) => {
-		// 			warn!(target: "engine", "Cannot report validator {} for misbehavior on block {}: {}",
-		// 				  address, block, err);
-		// 			false
-		// 		}
-		// 	} {
-		// 		nonce += U256::from(1);
-		// 	}
-		// 	nonce += U256::from(1);
-		// }
-
 		let mut queue = self.queued_reports.lock();
 		queue.retain(|&(malicious_validator_address, block, ref _data)| {
-			debug!(target: "engine", "Checking if report can be removed from cache");
-			let result = {
-				let current_block_number = header.number();
-				if block > current_block_number {
-					return false; // Report cannot be used, as it is for a block that isn’t in the current chain
-				}
-				if current_block_number > 100 && current_block_number - 100 > block {
-					return false; // Report is too old and cannot be used
-				}
-				let (data, decoder) = validator_set::functions::malice_reported_for_block::call(
-					malicious_validator_address, block);
-				match client.call_contract(BlockId::Latest, self.contract_address, data)
-						.and_then(|result| decoder.decode(&result[..]).map_err(|e| e.to_string())) {
-					Ok(reporters) => reporters,
-					Err(err) => {
-						warn!(target: "engine",
-							  "Failed to query malice reports {:?}, dropping pending report.",
-							  err);
-						return false;
-					}
-				}
-			};
-			debug!(target: "engine", "Got data from contract: {:?}", result);
-			if result.contains(&address) {
-				debug!(target: "engine", "Successfully removed report from report cache");
-				return false
+			trace!(target: "engine", "Checking if report can be removed from cache");
+			if block > header.number() {
+				return false; // Report cannot be used, as it is for a block that isn’t in the current chain
 			}
-			return true
+			if header.number() > 100 && header.number() - 100 > block {
+				return false; // Report is too old and cannot be used
+			}
+			let (data, decoder) = validator_set::functions::malice_reported_for_block::call(
+				malicious_validator_address, block);
+			match client.call_contract(BlockId::Latest, self.contract_address, data)
+					.and_then(|result| decoder.decode(&result[..]).map_err(|e| e.to_string())) {
+				Ok(ref reporters) if reporters.contains(&address) => {
+					trace!(target: "engine", "Successfully removed report from report cache");
+					false
+				}
+				Ok(_) => true,
+				Err(err) => {
+					warn!(target: "engine", "Failed to query malice reports {:?}, dropping pending report.", err);
+					false
+				}
+			}
 		});
 
-		while queue.len() > MAX_QUEUED_REPORTS {
-			warn!(target: "engine", "Removing report from report cache, even though it has not \
-			been finalized");
-			drop(queue.pop_front())
+		if queue.len() > MAX_QUEUED_REPORTS {
+			warn!(target: "engine", "Removing report from report cache, even though it has not been finalized");
+			queue.truncate(MAX_QUEUED_REPORTS);
+		}
+
+		let mut nonce = client.latest_nonce(address);
+		let mut resent_reports_in_block = self.resent_reports_in_block.lock();
+		if header.number() > *resent_reports_in_block {
+			*resent_reports_in_block = header.number();
+			debug!(target: "engine", "Checking for cached reports");
+			for (address, block, data) in &*queue {
+				debug!(target: "engine", "Trying to resend report");
+				while match self.transact(data.clone(), nonce) {
+					Ok(()) => false,
+					Err(Error(ErrorKind::Transaction(transaction::Error::Old), _)) => true,
+					Err(err) => {
+						warn!(target: "engine", "Cannot report validator {} for misbehavior on block {}: {}",
+							  address, block, err);
+						false
+					}
+				} {
+					nonce += U256::from(1);
+				}
+				nonce += U256::from(1);
+			}
 		}
 
 		Ok(())
