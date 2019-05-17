@@ -917,10 +917,9 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let base = self.stack.pop_back();
 				let expon = self.stack.pop_back();
 				// FIXME: decide whether to correct the semantics of exponentiation and exponentiate mod 256.
-				let modulus = (Integer::from(1) << 10000) - 1;
-				println!("base {}, expon {}, modulus {}", base, expon, modulus);
+				let modulus = Integer::from(1) << 256;
 				let res = base.pow_mod(&expon, &modulus).expect("Negative exponent is not allowed");
-				self.stack.push(res.keep_bits(256));
+				self.stack.push(res);
 			},
 			instructions::NOT => {
 				let a = self.stack.pop_back();
