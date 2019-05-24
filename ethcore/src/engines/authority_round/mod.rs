@@ -1398,6 +1398,14 @@ impl Engine<EthereumMachine> for AuthorityRound {
 			)));
 		}
 
+		// TEST CODE: DO NOT MERGE INTO ANY PRODUCTION BRANCH!
+		if let Some(addr) = self.report_malicious.get(&header.number()) {
+			warn!(target: "engine", "Reporting {} as malicious FOR TESTING PURPOSES.", addr);
+			self.validators.report_malicious(
+				addr, self.epoch_set(header)?.1, header.number(), Default::default()
+			);
+		}
+
 		match verify_timestamp(&self.step.inner, header_step(header, self.empty_steps_transition)?) {
 			Err(BlockError::InvalidSeal) => {
 				// This check runs in Phase 1 where there is no guarantee that the parent block is
@@ -1435,12 +1443,6 @@ impl Engine<EthereumMachine> for AuthorityRound {
 				self.validators.report_malicious(header.author(), set_number, header.number(), Default::default());
 				Err(EngineError::DoubleVote(*header.author()))?;
 			}
-		}
-
-		if let Some(addr) = self.report_malicious.get(&header.number()) {
-			// TEST CODE: DO NOT MERGE INTO ANY PRODUCTION BRANCH!
-			warn!(target: "engine", "Reporting {} as malicious FOR TESTING PURPOSES.", addr);
-			self.validators.report_malicious(addr, set_number, header.number(), Default::default());
 		}
 
 		// If empty step messages are enabled we will validate the messages in the seal, missing messages are not
