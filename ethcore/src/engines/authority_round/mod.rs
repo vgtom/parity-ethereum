@@ -933,7 +933,7 @@ impl AuthorityRound {
 			Some(signer) => signer.address(),
 			None => return false,
 		};
-		self.faulty_blocks_transition.get(&addr).map_or(true, |t| *t > header.number())
+		self.faulty_blocks_transition.get(&addr).map_or(false, |t| *t <= header.number())
 	}
 }
 
