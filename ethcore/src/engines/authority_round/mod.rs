@@ -1213,7 +1213,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 						self.report_skipped(header, step, parent_step, &*validators, set_number);
 					}
 
-					let mut fields = if self.should_produce_faulty_block(&header) {
+					let mut fields = if !self.should_produce_faulty_block(&header) {
 						vec![
 							encode(&step),
 							encode(&(&H520::from(signature) as &[u8])),
