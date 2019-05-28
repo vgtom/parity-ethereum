@@ -104,7 +104,7 @@ fn encode_first_proof(header: &Header, state_items: &[Vec<u8>]) -> Bytes {
 fn check_first_proof(machine: &EthereumMachine, contract_address: Address, old_header: Header, state_items: &[DBValue])
 	-> Result<Vec<Address>, String>
 {
-	use types::transaction::{Action, Transaction};
+	use types::transaction::Transaction;
 
 	// TODO: match client contract_call_tx more cleanly without duplication.
 	const PROVIDED_GAS: u64 = 50_000_000;
@@ -355,6 +355,22 @@ impl ValidatorSet for ValidatorSafeContract {
 			if header.number() > 100 && header.number() - 100 > block {
 				return false; // Report is too old and cannot be used
 			}
+			// Check if the validator is already banned...
+			let (data, decoder) = validator_set::functions::is_validator_banned::call(malicious_validator_address);
+			match client.call_contract(BlockId::Latest, self.contract_address, data)
+				.and_then(|result| decoder.decode(&result[..]).map_err(|e| e.to_string()))
+			{
+				Ok(true) => {
+					trace!(target: "engine", "Successfully removed report from report cache");
+					return false;
+				}
+				Ok(false) => (),
+				Err(err) => {
+					warn!(target: "engine", "Failed to query ban status {:?}, dropping pending report.", err);
+					return false;
+				}
+			}
+			// ...or if our report has already been processed.
 			let (data, decoder) = validator_set::functions::malice_reported_for_block::call(
 				malicious_validator_address, block
 			);

@@ -115,7 +115,7 @@ impl ValidatorSet for ValidatorContract {
 		self.validators.count_with_caller(bh, caller)
 	}
 
-	fn report_malicious(&self, address: &Address, set_block: BlockNumber, block: BlockNumber, proof: Bytes) {
+	fn report_malicious(&self, address: &Address, _set_block: BlockNumber, block: BlockNumber, proof: Bytes) {
 		let data = validator_report::functions::report_malicious::encode_input(*address, block, proof);
 		self.validators.queue_report((*address, block, data.clone()));
 		match self.transact(data) {
