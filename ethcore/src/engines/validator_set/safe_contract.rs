@@ -303,56 +303,18 @@ impl ValidatorSafeContract {
 			Some(matched_event) => Some(SimpleList::new(matched_event.new_set))
 		}
 	}
-}
 
-impl ValidatorSet for ValidatorSafeContract {
-	fn default_caller(&self, id: BlockId) -> Box<Call> {
-		let client = self.client.read().clone();
-		Box::new(move |addr, data| client.as_ref()
-			.and_then(Weak::upgrade)
-			.ok_or_else(|| "No client!".into())
-			.and_then(|c| {
-				match c.as_full_client() {
-					Some(c) => c.call_contract(id, addr, data),
-					None => Err("No full client!".into()),
-				}
-			})
-			.map(|out| (out, Vec::new()))) // generate no proofs in general
-	}
-
-	fn on_prepare_block(&self, _first: bool, header: &Header, caller: &mut SystemCall)
-		-> Result<Vec<(Address, Bytes)>, Error>
-	{
-		let (data, decoder) = validator_set::functions::emit_initiate_change_callable::call();
-		let mut returned_transactions = if !caller(self.contract_address, data)
-			.and_then(|x| decoder.decode(&x)
-			.map_err(|x| format!("chain spec bug: could not decode: {:?}", x)))
-			.map_err(::engines::EngineError::FailedSystemCall)? {
-			trace!(target: "engine", "New block #{} issued ― no need to call emitInitiateChange()", header.number());
-			Vec::new()
-		} else {
-			trace!(target: "engine", "New block issued #{} ― calling emitInitiateChange()", header.number());
-			let (data, _decoder) = validator_set::functions::emit_initiate_change::call();
-			vec![(self.contract_address, data)]
-		};
-		let queued_reports = self.queued_reports.lock();
-		for (_address, _block, data) in queued_reports.iter().take(MAX_RETURNED_REPORTS) {
-			returned_transactions.push((self.contract_address, data.clone()))
-		}
-		Ok(returned_transactions)
-	}
-
-	fn on_close_block(&self, header: &Header, our_address: &Address) -> Result<(), Error> {
+	fn filter_report_queue(&self, our_address: &Address) -> Result<(), Error>{
 		let client = self.client.read().as_ref().and_then(Weak::upgrade).ok_or("No client!")?;
 		let client = client.as_full_client().ok_or("No full client!")?;
+		let latest = client.block_number(BlockId::Latest).ok_or("No latest block number!")?;
 
-		let mut queue = self.queued_reports.lock();
-		queue.retain(|&(malicious_validator_address, block, ref _data)| {
+		self.queued_reports.lock().retain(|&(malicious_validator_address, block, ref _data)| {
 			trace!(target: "engine", "Checking if report can be removed from cache");
-			if block > header.number() {
+			if block > latest {
 				return false; // Report cannot be used, as it is for a block that isn’t in the current chain
 			}
-			if header.number() > 100 && header.number() - 100 > block {
+			if latest > 100 && latest - 100 > block {
 				return false; // Report is too old and cannot be used
 			}
 			// Check if the validator is already banned...
@@ -388,6 +350,55 @@ impl ValidatorSet for ValidatorSafeContract {
 				}
 			}
 		});
+
+		Ok(())
+	}
+}
+
+impl ValidatorSet for ValidatorSafeContract {
+	fn default_caller(&self, id: BlockId) -> Box<Call> {
+		let client = self.client.read().clone();
+		Box::new(move |addr, data| client.as_ref()
+			.and_then(Weak::upgrade)
+			.ok_or_else(|| "No client!".into())
+			.and_then(|c| {
+				match c.as_full_client() {
+					Some(c) => c.call_contract(id, addr, data),
+					None => Err("No full client!".into()),
+				}
+			})
+			.map(|out| (out, Vec::new()))) // generate no proofs in general
+	}
+
+	fn on_prepare_block(&self, _first: bool, header: &Header, caller: &mut SystemCall)
+		-> Result<Vec<(Address, Bytes)>, Error>
+	{
+		self.filter_report_queue(header.author())?;
+		let (data, decoder) = validator_set::functions::emit_initiate_change_callable::call();
+		let mut returned_transactions = if !caller(self.contract_address, data)
+			.and_then(|x| decoder.decode(&x)
+			.map_err(|x| format!("chain spec bug: could not decode: {:?}", x)))
+			.map_err(::engines::EngineError::FailedSystemCall)? {
+			trace!(target: "engine", "New block #{} issued ― no need to call emitInitiateChange()", header.number());
+			Vec::new()
+		} else {
+			trace!(target: "engine", "New block issued #{} ― calling emitInitiateChange()", header.number());
+			let (data, _decoder) = validator_set::functions::emit_initiate_change::call();
+			vec![(self.contract_address, data)]
+		};
+		let queued_reports = self.queued_reports.lock();
+		for (_address, _block, data) in queued_reports.iter().take(MAX_RETURNED_REPORTS) {
+			returned_transactions.push((self.contract_address, data.clone()))
+		}
+		Ok(returned_transactions)
+	}
+
+	fn on_close_block(&self, header: &Header, our_address: &Address) -> Result<(), Error> {
+		self.filter_report_queue(our_address)?;
+
+		let client = self.client.read().as_ref().and_then(Weak::upgrade).ok_or("No client!")?;
+		let client = client.as_full_client().ok_or("No full client!")?;
+		let mut queue = self.queued_reports.lock();
 
 		if queue.len() > MAX_QUEUED_REPORTS {
 			warn!(target: "engine", "Removing report from report cache, even though it has not been finalized");
