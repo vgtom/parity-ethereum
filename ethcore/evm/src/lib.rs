@@ -51,7 +51,7 @@ pub use vm::{
     ContractCreateResult, MessageCallResult, CreateContractAddress,
     GasLeft, ReturnData
 };
-pub use self::evm::{Finalize, FinalizationResult, CostType};
+pub use self::evm::{Finalize, FinalizationResult};
 pub use self::instructions::{InstructionInfo, Instruction};
 pub use self::vmtype::VMType;
 pub use self::factory::Factory;

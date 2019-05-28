@@ -18,7 +18,6 @@
 //!
 use std::sync::Arc;
 use vm::{Exec, Schedule};
-use ethereum_types::U256;
 use super::vm::ActionParams;
 use super::interpreter::SharedCache;
 use super::vmtype::VMType;
@@ -34,26 +33,16 @@ impl Factory {
 	/// Create fresh instance of VM
 	/// Might choose implementation depending on supplied gas.
 	pub fn create(&self, params: ActionParams, schedule: &Schedule, depth: usize) -> Box<Exec> {
-		match self.evm {
-			VMType::Interpreter => if Self::can_fit_in_usize(&params.gas) {
-				Box::new(super::interpreter::Interpreter::<usize>::new(params, self.evm_cache.clone(), schedule, depth))
-			} else {
-				Box::new(super::interpreter::Interpreter::<U256>::new(params, self.evm_cache.clone(), schedule, depth))
-			}
-		}
+		Box::new(super::interpreter::Interpreter::new(params, self.evm_cache.clone(), schedule, depth))
 	}
 
 	/// Create new instance of specific `VMType` factory, with a size in bytes
 	/// for caching jump destinations.
 	pub fn new(evm: VMType, cache_size: usize) -> Self {
 		Factory {
-			evm: evm,
+			evm,
 			evm_cache: Arc::new(SharedCache::new(cache_size)),
 		}
-	}
-
-	fn can_fit_in_usize(gas: &U256) -> bool {
-		gas == &U256::from(gas.low_u64() as usize)
 	}
 }
 

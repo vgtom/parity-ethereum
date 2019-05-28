@@ -91,7 +91,9 @@ impl Memory for Vec<u8> {
 		self[offset + nel..offset + SIZE].copy_from_slice(digits.as_slice());
 		if nel > 0 {
 			// Fill out the leading zeros.
-			self[offset..offset + nel].copy_from_slice(vec![0; nel].as_slice())
+			for byte in &mut self[offset..offset + nel] {
+				*byte = 0;
+			}
 		}
 	}
 

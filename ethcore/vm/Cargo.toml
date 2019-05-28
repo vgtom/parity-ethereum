@@ -13,3 +13,4 @@ log = "0.4"
 ethjson = { path = "../../json" }
 rlp = { version = "0.3.0", features = ["ethereum"] }
 keccak-hash = "0.1"
+rug = "1.4"

@@ -36,7 +36,6 @@ use vm::{
 	TrapKind, TrapError
 };
 
-use evm::CostType;
 use instructions::{self, Instruction, InstructionInfo};
 
 use self::gasometer::Gasometer;
@@ -52,6 +51,13 @@ const ENDIANNESS: Order = Order::LsfBe;
 const ENDIANNESS: Order = Order::LsfLe;
 
 const GASOMETER_PROOF: &str = "If gasometer is None, Err is immediately returned in step; this function is only called by step; qed";
+
+lazy_static! {
+	/// The unsigned 256-bit integer arithmetic modulus.
+	pub static ref U256_MODULUS: Integer = Integer::from(1) << 256;
+	/// The maximum unsigned 256-bit integer.
+	pub static ref U256_MAX: Integer = (Integer::from(1) << 256) - 1;
+}
 
 type ProgramCounter = usize;
 
@@ -83,13 +89,13 @@ impl CodeReader {
 	}
 }
 
-enum InstructionResult<Gas> {
+enum InstructionResult {
 	Ok,
-	UnusedGas(Gas),
+	UnusedGas(Integer),
 	JumpToPosition(Integer),
 	StopExecutionNeedsReturn {
 		/// Gas left.
-		gas: Gas,
+		gas: Integer,
 		/// Return data offset.
 		init_off: usize,
 		/// Return data size.
@@ -118,9 +124,9 @@ struct InterpreterParams {
 	/// Transaction initiator.
 	pub origin: Address,
 	/// Gas paid up front for transaction execution
-	pub gas: U256,
+	pub gas: Integer,
 	/// Gas price.
-	pub gas_price: U256,
+	pub gas_price: Integer,
 	/// Transaction value.
 	pub value: ActionValue,
 	/// Input data.
@@ -139,8 +145,8 @@ impl From<ActionParams> for InterpreterParams {
 			address: params.address,
 			sender: params.sender,
 			origin: params.origin,
-			gas: params.gas,
-			gas_price: params.gas_price,
+			gas: u256_to_integer(&params.gas),
+			gas_price: u256_to_integer(&params.gas_price),
 			value: params.value,
 			data: params.data,
 			call_type: params.call_type,
@@ -167,7 +173,7 @@ impl From<vm::Error> for InterpreterResult {
 }
 
 /// Intepreter EVM implementation
-pub struct Interpreter<Cost: CostType> {
+pub struct Interpreter {
 	mem: Vec<u8>,
 	cache: Arc<SharedCache>,
 	params: InterpreterParams,
@@ -177,15 +183,14 @@ pub struct Interpreter<Cost: CostType> {
 	do_trace: bool,
 	done: bool,
 	valid_jump_destinations: Option<Arc<BitSet>>,
-	gasometer: Option<Gasometer<Cost>>,
+	gasometer: Option<Gasometer>,
 	stack: VecStack<Integer>,
 	resume_output_range: Option<(usize, usize)>,
-	resume_result: Option<InstructionResult<Cost>>,
+	resume_result: Option<InstructionResult>,
 	last_stack_ret_len: usize,
-	_type: PhantomData<Cost>,
 }
 
-impl<Cost: 'static + CostType> vm::Exec for Interpreter<Cost> {
+impl vm::Exec for Interpreter {
 	fn exec(mut self: Box<Self>, ext: &mut vm::Ext) -> vm::ExecTrapResult<GasLeft> {
 		loop {
 			let result = self.step(ext);
@@ -206,7 +211,7 @@ impl<Cost: 'static + CostType> vm::Exec for Interpreter<Cost> {
 	}
 }
 
-impl<Cost: 'static + CostType> vm::ResumeCall for Interpreter<Cost> {
+impl vm::ResumeCall for Interpreter {
 	fn resume_call(mut self: Box<Self>, result: MessageCallResult) -> Box<vm::Exec> {
 		{
 			let this = &mut *self;
@@ -220,7 +225,7 @@ impl<Cost: 'static + CostType> vm::ResumeCall for Interpreter<Cost> {
 
 					this.return_data = data;
 					this.stack.push(Integer::from(1));
-					this.resume_result = Some(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater than current one")));
+					this.resume_result = Some(InstructionResult::UnusedGas(u256_to_integer(&gas_left)));
 				},
 				MessageCallResult::Reverted(gas_left, data) => {
 					let output = this.mem.writeable_slice(out_off, out_size);
@@ -229,7 +234,7 @@ impl<Cost: 'static + CostType> vm::ResumeCall for Interpreter<Cost> {
 
 					this.return_data = data;
 					this.stack.push(Integer::from(0));
-					this.resume_result = Some(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater than current one")));
+					this.resume_result = Some(InstructionResult::UnusedGas(u256_to_integer(&gas_left)));
 				},
 				MessageCallResult::Failed => {
 					this.stack.push(Integer::from(0));
@@ -241,17 +246,17 @@ impl<Cost: 'static + CostType> vm::ResumeCall for Interpreter<Cost> {
 	}
 }
 
-impl<Cost: 'static + CostType> vm::ResumeCreate for Interpreter<Cost> {
+impl vm::ResumeCreate for Interpreter {
 	fn resume_create(mut self: Box<Self>, result: ContractCreateResult) -> Box<vm::Exec> {
 		match result {
 			ContractCreateResult::Created(address, gas_left) => {
 				self.stack.push(slice_be_to_integer(&*address));
-				self.resume_result = Some(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater.")));
+				self.resume_result = Some(InstructionResult::UnusedGas(u256_to_integer(&gas_left)));
 			},
 			ContractCreateResult::Reverted(gas_left, return_data) => {
 				self.stack.push(Integer::from(0));
 				self.return_data = return_data;
-				self.resume_result = Some(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater.")));
+				self.resume_result = Some(InstructionResult::UnusedGas(u256_to_integer(&gas_left)));
 			},
 			ContractCreateResult::Failed => {
 				self.stack.push(Integer::from(0));
@@ -262,14 +267,14 @@ impl<Cost: 'static + CostType> vm::ResumeCreate for Interpreter<Cost> {
 	}
 }
 
-impl<Cost: CostType> Interpreter<Cost> {
+impl Interpreter {
 	/// Create a new `Interpreter` instance with shared cache.
-	pub fn new(mut params: ActionParams, cache: Arc<SharedCache>, schedule: &Schedule, depth: usize) -> Interpreter<Cost> {
+	pub fn new(mut params: ActionParams, cache: Arc<SharedCache>, schedule: &Schedule, depth: usize) -> Interpreter {
 		let reader = CodeReader::new(params.code.take().expect("VM always called with code; qed"));
 		let params = InterpreterParams::from(params);
 		let informant = informant::EvmInformant::new(depth);
 		let valid_jump_destinations = None;
-		let gasometer = Cost::from_u256(params.gas).ok().map(|gas| Gasometer::<Cost>::new(gas));
+		let gasometer = Some(Gasometer::new(params.gas.clone()));
 		let stack = VecStack::with_capacity(schedule.stack_limit);
 
 		Interpreter {
@@ -282,7 +287,6 @@ impl<Cost: CostType> Interpreter<Cost> {
 			last_stack_ret_len: 0,
 			resume_output_range: None,
 			resume_result: None,
-			_type: PhantomData,
 		}
 	}
 
@@ -296,7 +300,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 		let result = if self.gasometer.is_none() {
 			InterpreterResult::Done(Err(vm::Error::OutOfGas))
 		} else if self.reader.len() == 0 {
-			InterpreterResult::Done(Ok(GasLeft::Known(self.gasometer.as_ref().expect("Gasometer None case is checked above; qed").current_gas.as_u256())))
+			InterpreterResult::Done(Ok(GasLeft::Known(integer_to_u256(&self.gasometer.as_ref().expect("Gasometer None case is checked above; qed").current_gas))))
 		} else {
 			self.step_inner(ext).err().expect("step_inner never returns Ok(()); qed")
 		};
@@ -320,7 +324,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 
 				// TODO: make compile-time removable if too much of a performance hit.
 				self.do_trace = self.do_trace && ext.trace_next_instruction(
-					self.reader.position - 1, opcode, self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas.as_u256(),
+					self.reader.position - 1, opcode, integer_to_u256(&self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas),
 				);
 
 				let instruction = match instruction {
@@ -337,19 +341,19 @@ impl<Cost: CostType> Interpreter<Cost> {
 				// Calculate gas cost
 				let requirements = self.gasometer.as_mut().expect(GASOMETER_PROOF).requirements(ext, instruction, info, &self.stack, self.mem.size())?;
 				if self.do_trace {
-					let store_wr = Self::store_written(instruction, &self.stack).and_then(|(a, b)| Some((integer_to_u256(&a), integer_to_u256(&b))));
-					ext.trace_prepare_execute(self.reader.position - 1, opcode, requirements.gas_cost.as_u256(), Self::mem_written(instruction, &self.stack), store_wr);
+					let store_wr = Self::store_written(instruction, &self.stack).map(|(a, b)| (integer_to_u256(&a), integer_to_u256(&b)));
+					ext.trace_prepare_execute(self.reader.position - 1, opcode, integer_to_u256(&requirements.gas_cost), Self::mem_written(instruction, &self.stack), store_wr);
 				}
 
 				self.gasometer.as_mut().expect(GASOMETER_PROOF).verify_gas(&requirements.gas_cost)?;
 				self.mem.expand(requirements.memory_required_size);
 				self.gasometer.as_mut().expect(GASOMETER_PROOF).current_mem_gas = requirements.memory_total_gas;
-				self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas = self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas - requirements.gas_cost;
+				self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas = Integer::from(&self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas - requirements.gas_cost);
 
 				evm_debug!({ self.informant.before_instruction(self.reader.position, instruction, info, &self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas, &self.stack) });
 
 				// Execute instruction
-				let current_gas = self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas;
+				let current_gas = self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas.clone();
 				let result = self.exec_instruction(
 					current_gas, ext, instruction, requirements.provide_gas
 				)?;
@@ -365,12 +369,13 @@ impl<Cost: CostType> Interpreter<Cost> {
 		}
 
 		if let InstructionResult::UnusedGas(ref gas) = result {
-			self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas = self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas + *gas;
+			self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas =
+				Integer::from(&self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas + gas);
 		}
 
 		if self.do_trace {
 			ext.trace_executed(
-				self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas.as_u256(),
+				integer_to_u256(&self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas),
 				self.stack.peek_top(self.last_stack_ret_len).iter().map(integer_to_u256).collect::<Vec<_>>().as_slice(),
 				&self.mem,
 			);
@@ -389,19 +394,19 @@ impl<Cost: CostType> Interpreter<Cost> {
 			InstructionResult::StopExecutionNeedsReturn {gas, init_off, init_size, apply} => {
 				let mem = mem::replace(&mut self.mem, Vec::new());
 				return Err(InterpreterResult::Done(Ok(GasLeft::NeedsReturn {
-					gas_left: gas.as_u256(),
+					gas_left: integer_to_u256(&gas),
 					data: mem.into_return_data(init_off, init_size),
 					apply_state: apply
 				})));
 			},
 			InstructionResult::StopExecution => {
-				return Err(InterpreterResult::Done(Ok(GasLeft::Known(self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas.as_u256()))));
+				return Err(InterpreterResult::Done(Ok(GasLeft::Known(integer_to_u256(&self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas)))));
 			},
 			_ => {},
 		}
 
 		if self.reader.position >= self.reader.len() {
-			return Err(InterpreterResult::Done(Ok(GasLeft::Known(self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas.as_u256()))));
+			return Err(InterpreterResult::Done(Ok(GasLeft::Known(integer_to_u256(&self.gasometer.as_mut().expect(GASOMETER_PROOF).current_gas)))));
 		}
 
 		Err(InterpreterResult::Continue)
@@ -473,11 +478,11 @@ impl<Cost: CostType> Interpreter<Cost> {
 
 	fn exec_instruction(
 		&mut self,
-		gas: Cost,
+		gas: Integer,
 		ext: &mut vm::Ext,
 		instruction: Instruction,
-		provided: Option<Cost>
-	) -> vm::Result<InstructionResult<Cost>> {
+		provided: Option<Integer>
+	) -> vm::Result<InstructionResult> {
 		match instruction {
 			instructions::JUMP => {
 				let jump = self.stack.pop_back();
@@ -524,16 +529,16 @@ impl<Cost: CostType> Interpreter<Cost> {
 
 				let contract_code = self.mem.read_slice(init_off, init_size);
 
-				let create_result = ext.create(&create_gas.as_u256(), &endowment, contract_code, address_scheme, true);
+				let create_result = ext.create(&integer_to_u256(&create_gas), &endowment, contract_code, address_scheme, true);
 				return match create_result {
 					Ok(ContractCreateResult::Created(address, gas_left)) => {
 						self.stack.push(slice_be_to_integer(&*address));
-						Ok(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater.")))
+						Ok(InstructionResult::UnusedGas(u256_to_integer(&gas_left)))
 					},
 					Ok(ContractCreateResult::Reverted(gas_left, return_data)) => {
 						self.stack.push(Integer::from(0));
 						self.return_data = return_data;
-						Ok(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater.")))
+						Ok(InstructionResult::UnusedGas(u256_to_integer(&gas_left)))
 					},
 					Ok(ContractCreateResult::Failed) => {
 						self.stack.push(Integer::from(0));
@@ -555,9 +560,9 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let value = if instruction == instructions::DELEGATECALL {
 					None
 				} else if instruction == instructions::STATICCALL {
-					Some(U256::from(0))
+					Some(Integer::from(0))
 				} else {
-					Some(integer_to_u256(&self.stack.pop_back()))
+					Some(self.stack.pop_back())
 				};
 
 				let in_off = self.stack.pop_back().to_usize_wrapping();
@@ -566,22 +571,25 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let out_size = self.stack.pop_back().to_usize_wrapping();
 
 				// Add stipend (only CALL|CALLCODE when value > 0)
-				let call_gas = call_gas.overflow_add(value.map_or_else(|| Cost::from(0), |val| match val.is_zero() {
-					false => Cost::from(ext.schedule().call_stipend),
-					true => Cost::from(0),
-				})).0;
+				let call_gas = call_gas + (value.as_ref().map_or_else(|| Integer::from(0), |val| if val != &0 {
+					Integer::from(ext.schedule().call_stipend)
+				} else {
+					Integer::from(0)
+				}));
 
 				// Get sender & receive addresses, check if we have balance
 				let (sender_address, receive_address, has_balance, call_type) = match instruction {
 					instructions::CALL => {
-						if ext.is_static() && value.map_or(false, |v| !v.is_zero()) {
+						if ext.is_static() && value.as_ref().map_or(false, |v| v != &0) {
 							return Err(vm::Error::MutableCallInStaticContext);
 						}
-						let has_balance = ext.balance(&self.params.address)? >= value.expect("value set for all but delegate call; qed");
+						let has_balance = &u256_to_integer(&ext.balance(&self.params.address)?) >=
+							value.as_ref().expect("value set for all but delegate call; qed");
 						(&self.params.address, &code_address, has_balance, CallType::Call)
 					},
 					instructions::CALLCODE => {
-						let has_balance = ext.balance(&self.params.address)? >= value.expect("value set for all but delegate call; qed");
+						let has_balance = &u256_to_integer(&ext.balance(&self.params.address)?) >=
+							value.as_ref().expect("value set for all but delegate call; qed");
 						(&self.params.address, &self.params.address, has_balance, CallType::CallCode)
 					},
 					instructions::DELEGATECALL => (&self.params.sender, &self.params.address, true, CallType::DelegateCall),
@@ -600,7 +608,8 @@ impl<Cost: CostType> Interpreter<Cost> {
 
 				let call_result = {
 					let input = self.mem.read_slice(in_off, in_size);
-					ext.call(&call_gas.as_u256(), sender_address, receive_address, value, input, &code_address, call_type, true)
+					ext.call(&integer_to_u256(&call_gas), sender_address, receive_address,
+							 value.map(|u| integer_to_u256(&u)), input, &code_address, call_type, true)
 				};
 
 				self.resume_output_range = Some((out_off, out_size));
@@ -613,7 +622,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 
 						self.stack.push(Integer::from(1));
 						self.return_data = data;
-						Ok(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater than current one")))
+						Ok(InstructionResult::UnusedGas(u256_to_integer(&gas_left)))
 					},
 					Ok(MessageCallResult::Reverted(gas_left, data)) => {
 						let output = self.mem.writeable_slice(out_off, out_size);
@@ -622,7 +631,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 
 						self.stack.push(Integer::from(0));
 						self.return_data = data;
-						Ok(InstructionResult::UnusedGas(Cost::from_u256(gas_left).expect("Gas left cannot be greater than current one")))
+						Ok(InstructionResult::UnusedGas(u256_to_integer(&gas_left)))
 					},
 					Ok(MessageCallResult::Failed) => {
 						self.stack.push(Integer::from(0));
@@ -707,27 +716,26 @@ impl<Cost: CostType> Interpreter<Cost> {
 			},
 			instructions::SSTORE => {
 				let key = integer_to_hash(&self.stack.pop_back());
-				let val = integer_to_u256(&self.stack.pop_back());
+				let val = self.stack.pop_back();
 
-				let current_val = U256::from(ext.storage_at(&key)?);
+				let current_val = slice_be_to_integer(&*ext.storage_at(&key)?);
 				// Increase refund for clear
 				if ext.schedule().eip1283 {
-					let original_val = U256::from(&*ext.initial_storage_at(&key)?);
+					let original_val = slice_be_to_integer(&*ext.initial_storage_at(&key)?);
 					gasometer::handle_eip1283_sstore_clears_refund(ext, &original_val, &current_val, &val);
 				} else {
-					if !current_val.is_zero() && val.is_zero() {
+					if current_val != 0 && val == 0 {
 						let sstore_clears_schedule = ext.schedule().sstore_refund_gas;
 						ext.add_sstore_refund(sstore_clears_schedule);
 					}
 				}
-				ext.set_storage(key, H256::from(val))?;
+				ext.set_storage(key, integer_to_hash(&val))?;
 			},
 			instructions::PC => {
 				self.stack.push(Integer::from(self.reader.position - 1));
 			},
 			instructions::GAS => {
-				// FIXME: refactor CostType with Integer instead of U256.
-				self.stack.push(u256_to_integer(&gas.as_u256()));
+				self.stack.push(gas);
 			},
 			instructions::ADDRESS => {
 				self.stack.push(slice_be_to_integer(&*self.params.address));
@@ -811,7 +819,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 				);
 			},
 			instructions::GASPRICE => {
-				self.stack.push(u256_to_integer(&self.params.gas_price));
+				self.stack.push(self.params.gas_price.clone());
 			},
 			instructions::BLOCKHASH => {
 				let block_number = integer_to_u256(&self.stack.pop_back());
@@ -857,7 +865,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 			instructions::ADD => {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
-                self.stack.push((a + b).keep_bits(256));
+				self.stack.push((a + b).keep_bits(256));
 			},
 			instructions::MUL => {
 				let a = self.stack.pop_back();
@@ -868,12 +876,12 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let a = self.stack.pop_back();
 				let b = self.stack.pop_back();
 				// Perform subtraction, wrapping from 0 down to (1 << 256) - 1. The result is a
-				// 256-bit number in twos complement notation.
+				// 256-bit number in two's complement notation.
 				let r = a - b;
 				let wrapped_r = if r >= 0 {
 					r
 				} else {
-					r + (Integer::from(1) << 256)
+					r + U256_MODULUS.clone()
 				};
 				self.stack.push(wrapped_r);
 			},
@@ -917,8 +925,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let base = self.stack.pop_back();
 				let expon = self.stack.pop_back();
 				// FIXME: decide whether to correct the semantics of exponentiation and exponentiate mod 256.
-				let modulus = Integer::from(1) << 256;
-				let res = base.pow_mod(&expon, &modulus).expect("Negative exponent is not allowed");
+				let res = base.pow_mod(&expon, &U256_MODULUS).expect("Negative exponent is not allowed");
 				self.stack.push(res);
 			},
 			instructions::NOT => {
@@ -1033,7 +1040,7 @@ impl<Cost: CostType> Interpreter<Cost> {
 				let result = if shift >= 256 {
 					Integer::from(0)
 				} else {
-					value << shift.to_u32_wrapping()
+					(value << shift.to_u32_wrapping()).keep_bits(256)
 				};
 				self.stack.push(result);
 			},
@@ -1050,22 +1057,21 @@ impl<Cost: CostType> Interpreter<Cost> {
 			},
 			instructions::SAR => {
 				// We cannot use get_and_reset_sign/set_sign here, because the rounding looks different.
-				let u256_max = || (Integer::from(1) << 256) - 1;
-				let shift = self.stack.pop_back();
+				let shift = self.stack.pop_back().to_u32_wrapping();
 				let value = self.stack.pop_back();
 				let sign = value.get_bit(255);
 
 				let result = if shift >= 256 {
 					if sign {
-						u256_max()
+						U256_MAX.clone()
 					} else {
 						Integer::from(0)
 					}
 				} else {
-					let shift = shift.to_u32_wrapping();
 					let mut shifted = value >> shift;
 					if sign {
-						shifted = shifted | (u256_max() << (256 - shift));
+						let mask = U256_MAX.clone() ^ ((Integer::from(1) << shift) - 1);
+						shifted = shifted | mask;
 					}
 					shifted
 				};
@@ -1114,18 +1120,24 @@ impl<Cost: CostType> Interpreter<Cost> {
 	}
 }
 
-/// Truncates the integer to 256 bits and, treating the result in twos complement notation, returns
+/// Truncates the integer to 256 bits and, treating the result in two's complement notation, returns
 /// its absolute value and sign.
 fn get_and_reset_sign(n: Integer) -> (Integer, bool) {
 	let n = n.keep_bits(256);
 	let sign = n.get_bit(255);
 	let n_abs = if sign {
-		// The result of addition cannot overflow 256 bits because the bit 255 is 0 after ^.
-		(((Integer::from(1) << 256) - 1) ^ n) + 1
+		U256_MODULUS.clone() - n
 	} else {
 		n
 	};
 	(n_abs, sign)
+}
+
+/// Converts an integer to a big-endian vector of digits of given `size`.
+#[inline]
+fn integer_to_digits_be(n: &Integer, size: usize) -> Vec<u8> {
+	let n_sized = Integer::from(n.keep_bits_ref(size as u32 * 8));
+	n_sized.to_digits::<u8>(Order::MsfBe)
 }
 
 /// Converts a variable length `Integer` to a 32-byte long big-endian `H256`. If the argument is
@@ -1134,28 +1146,24 @@ fn get_and_reset_sign(n: Integer) -> (Integer, bool) {
 fn integer_to_hash(n: &Integer) -> H256 {
 	const SIZE: usize = 32;
 	let mut r = H256::new();
-	let n256 = Integer::from(n.keep_bits_ref(SIZE as u32 * 8));
-	let digits = n256.to_digits::<u8>(Order::MsfBe);
-	let len = digits.len();
-	r[SIZE - len .. SIZE].copy_from_slice(digits.as_slice());
+	let digits = integer_to_digits_be(n, SIZE);
+	r[SIZE - digits.len() .. SIZE].copy_from_slice(digits.as_slice());
 	r
 }
 
-/// Converts a variable length `Integer` to a 20-byte long big-endian `Address`. If the argument is longer than 20
-/// bytes, the lower 20 bytes are used.
+/// Converts a variable length `Integer` to a 20-byte long big-endian `Address`. If the argument is
+/// longer than 20 bytes, the lower 20 bytes are used.
 #[inline]
 fn integer_to_address(n: &Integer) -> Address {
 	const SIZE: usize = 20;
 	let mut r = Address::new();
-	let n160 = Integer::from(n.keep_bits_ref(SIZE as u32 * 8));
-	let digits = n160.to_digits::<u8>(Order::MsfBe);
-	let len = digits.len();
-	r[SIZE - len .. SIZE].copy_from_slice(digits.as_slice());
+	let digits = integer_to_digits_be(n, SIZE);
+	r[SIZE - digits.len() .. SIZE].copy_from_slice(digits.as_slice());
 	r
 }
 
-/// Converts a variable length `Integer` to a 32-byte long little-endian `U256`. If the argument is longer than 32
-/// bytes, the lower 32 bytes are used.
+/// Converts a variable length `Integer` to a 32-byte long little-endian `U256`. If the argument is
+/// longer than 32 bytes, the lower 32 bytes are used.
 #[inline]
 fn integer_to_u256(n: &Integer) -> U256 {
 	let n256 = Integer::from(n.keep_bits_ref(256));
@@ -1174,12 +1182,23 @@ fn u256_to_integer(n: &U256) -> Integer {
 ///
 // FIXME: add tests.
 #[inline]
-fn slice_be_to_integer(slice: &[u8]) -> Integer {
+pub fn slice_be_to_integer(slice: &[u8]) -> Integer {
 	Integer::from_digits(slice, Order::MsfBe)
 }
 
-/// Applies an `Integer`-valued function to two arguments of type `U256`. The first argument is converted to a signed
-/// `Integer`. The second argument is left unsigned.
+/// Maps a signed `Integer` to an unsigned integer using two's complement encoding. Assumes the
+/// argument is equivalent to a 256-bit integer in two's complement encoding.
+#[inline]
+fn signed_to_twos_complement(n: Integer) -> Integer {
+ 	if n < 0 {
+		U256_MODULUS.clone() - n.abs()
+	} else {
+		n
+	}
+}
+
+/// Applies an `Integer`-valued function to two arguments of type `U256`. The first argument is
+/// converted to a signed `Integer`. The second argument is left unsigned.
 ///
 /// Panics if the size of the result of function application is greater than 32 bytes.
 #[inline]
@@ -1187,11 +1206,12 @@ fn apply_rug_first_signed_2<F>(f: F, a: Integer, b: Integer) -> Integer
 where F: Fn(Integer, Integer) -> Integer {
 	let (a, sign_a) = get_and_reset_sign(a);
 	let a = if sign_a { a.as_neg().clone() } else { a };
-	f(a, b)
+	let r = f(a, b);
+	signed_to_twos_complement(r)
 }
 
-/// Applies an `Integer`-valued function to two arguments of type `U256` whose highest bit indicates the sign in twos
-/// complement encoding.
+/// Applies an `Integer`-valued function to two arguments of type `U256` whose highest bit indicates
+/// the sign in two's complement encoding.
 ///
 /// Panics if the size of the result of function application is greater than 32 bytes.
 #[inline]
@@ -1201,7 +1221,8 @@ where F: Fn(Integer, Integer) -> Integer {
 	let (b, sign_b) = get_and_reset_sign(b);
 	let a = if sign_a { a.as_neg().clone() } else { a };
 	let b = if sign_b { b.as_neg().clone() } else { b };
-	f(a, b)
+	let r = f(a, b);
+	signed_to_twos_complement(r)
 }
 
 #[cfg(test)]
