@@ -27,6 +27,7 @@ use kvdb::DBValue;
 use memory_cache::MemoryLruCache;
 use parking_lot::{RwLock, Mutex};
 use rlp::{Rlp, RlpStream};
+use types::BlockNumber;
 use types::header::Header;
 use types::ids::BlockId;
 use types::log_entry::LogEntry;
@@ -84,9 +85,9 @@ pub struct ValidatorSafeContract {
 	contract_address: Address,
 	validators: RwLock<MemoryLruCache<H256, SimpleList>>,
 	client: RwLock<Option<Weak<EngineClient>>>, // TODO [keorn]: remove
-	queued_reports: Mutex<VecDeque<(Address, u64, Vec<u8>)>>,
+	queued_reports: Mutex<VecDeque<(Address, BlockNumber, Vec<u8>)>>,
 	/// The block number where we resent the queued reports last time.
-	resent_reports_in_block: Mutex<u64>,
+	resent_reports_in_block: Mutex<BlockNumber>,
 }
 
 // first proof is just a state proof call of `getValidators` at header's state.
@@ -212,7 +213,7 @@ impl ValidatorSafeContract {
 		}
 	}
 
-	pub(crate) fn queue_report(&self, data: (Address, u64, Vec<u8>)) {
+	pub(crate) fn queue_report(&self, data: (Address, BlockNumber, Vec<u8>)) {
 		self.queued_reports
 			.lock()
 			.push_back(data)
@@ -304,17 +305,16 @@ impl ValidatorSafeContract {
 		}
 	}
 
-	fn filter_report_queue(&self, our_address: &Address) -> Result<(), Error>{
+	fn filter_report_queue(&self, our_address: &Address, latest_block: BlockNumber) -> Result<(), Error>{
 		let client = self.client.read().as_ref().and_then(Weak::upgrade).ok_or("No client!")?;
 		let client = client.as_full_client().ok_or("No full client!")?;
-		let latest = client.block_number(BlockId::Latest).ok_or("No latest block number!")?;
 
 		self.queued_reports.lock().retain(|&(malicious_validator_address, block, ref _data)| {
 			trace!(target: "engine", "Checking if report can be removed from cache");
-			if block > latest {
+			if block > latest_block {
 				return false; // Report cannot be used, as it is for a block that isn’t in the current chain
 			}
-			if latest > 100 && latest - 100 > block {
+			if latest_block > 100 && latest_block - 100 > block {
 				return false; // Report is too old and cannot be used
 			}
 			// Check if the validator is already banned...
@@ -373,7 +373,7 @@ impl ValidatorSet for ValidatorSafeContract {
 	fn on_prepare_block(&self, _first: bool, header: &Header, caller: &mut SystemCall)
 		-> Result<Vec<(Address, Bytes)>, Error>
 	{
-		self.filter_report_queue(header.author())?;
+		self.filter_report_queue(header.author(), header.number())?;
 		let (data, decoder) = validator_set::functions::emit_initiate_change_callable::call();
 		let mut returned_transactions = if !caller(self.contract_address, data)
 			.and_then(|x| decoder.decode(&x)
@@ -394,10 +394,12 @@ impl ValidatorSet for ValidatorSafeContract {
 	}
 
 	fn on_close_block(&self, header: &Header, our_address: &Address) -> Result<(), Error> {
-		self.filter_report_queue(our_address)?;
-
 		let client = self.client.read().as_ref().and_then(Weak::upgrade).ok_or("No client!")?;
 		let client = client.as_full_client().ok_or("No full client!")?;
+
+		let latest_block = header.number().max(client.block_number(BlockId::Latest).unwrap_or(0)) + 1;
+		self.filter_report_queue(our_address, latest_block)?;
+
 		let mut queue = self.queued_reports.lock();
 
 		if queue.len() > MAX_QUEUED_REPORTS {
@@ -486,7 +488,7 @@ impl ValidatorSet for ValidatorSafeContract {
 		}
 	}
 
-	fn epoch_set(&self, first: bool, machine: &EthereumMachine, _number: ::types::BlockNumber, proof: &[u8])
+	fn epoch_set(&self, first: bool, machine: &EthereumMachine, _number: BlockNumber, proof: &[u8])
 		-> Result<(SimpleList, Option<H256>), Error>
 	{
 		let rlp = Rlp::new(proof);
