@@ -1070,7 +1070,8 @@ impl Interpreter {
 				} else {
 					let mut shifted = value >> shift;
 					if sign {
-						let mask = U256_MAX.clone() ^ ((Integer::from(1) << shift) - 1);
+						let mask = U256_MAX.clone() ^ ((Integer::from(1) << (256 - shift)) - 1);
+						println!("mask: {:x}", mask);
 						shifted = shifted | mask;
 					}
 					shifted

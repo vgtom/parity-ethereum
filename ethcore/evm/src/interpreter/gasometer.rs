@@ -443,10 +443,9 @@ fn test_mem_gas_cost() {
 	let gasometer = Gasometer::new(Integer::from(0));
 	let schedule = Schedule::default();
 	let current_mem_size = 5;
-	let mem_size = U256_MAX;
 
 	// when
-	let result = gasometer.mem_gas_cost(&schedule, current_mem_size, &mem_size);
+	let result = gasometer.mem_gas_cost(&schedule, current_mem_size, &U256_MAX);
 
 	// then
 	if result.is_ok() {
