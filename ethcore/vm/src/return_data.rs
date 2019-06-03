@@ -16,7 +16,7 @@
 
 //! Return data structures
 
-use ethereum_types::U256;
+use rug::Integer;
 
 /// Return data buffer. Holds memory from a previous call and a slice into that memory.
 #[derive(Debug)]
@@ -57,11 +57,11 @@ impl ReturnData {
 #[derive(Debug)]
 pub enum GasLeft {
 	/// Known gas left
-	Known(U256),
+	Known(Integer),
 	/// Return or Revert instruction must be processed.
 	NeedsReturn {
 		/// Amount of gas left.
-		gas_left: U256,
+		gas_left: Integer,
 		/// Return data buffer.
 		data: ReturnData,
 		/// Apply or revert state changes on revert.

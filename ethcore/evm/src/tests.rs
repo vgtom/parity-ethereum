@@ -19,6 +19,7 @@ use std::str::FromStr;
 use std::hash::Hash;
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
+use rug::Integer;
 use rustc_hex::FromHex;
 use ethereum_types::{U256, H256, Address};
 use vm::{self, ActionParams, ActionValue, Ext};
@@ -38,11 +39,11 @@ fn test_add(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_988));
+	assert_eq!(gas_left, Integer::from(79_988));
 	assert_store(&ext, 0, "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe");
 }
 
@@ -58,11 +59,11 @@ fn test_sha3(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_961));
+	assert_eq!(gas_left, Integer::from(79_961));
 	assert_store(&ext, 0, "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
 }
 
@@ -78,11 +79,11 @@ fn test_address(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_995));
+	assert_eq!(gas_left, Integer::from(79_995));
 	assert_store(&ext, 0, "0000000000000000000000000f572e5295c57f15886f9b263e2f6d2d6c7b5ec6");
 }
 
@@ -100,11 +101,11 @@ fn test_origin(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_995));
+	assert_eq!(gas_left, Integer::from(79_995));
 	assert_store(&ext, 0, "000000000000000000000000cd1722f2947def4cf144679da39c4c32bdc35681");
 }
 
@@ -122,11 +123,11 @@ fn test_sender(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_995));
+	assert_eq!(gas_left, Integer::from(79_995));
 	assert_store(&ext, 0, "000000000000000000000000cd1722f2947def4cf144679da39c4c32bdc35681");
 }
 
@@ -157,11 +158,11 @@ fn test_extcodecopy(factory: super::Factory) {
 	ext.codes.insert(sender, Arc::new(sender_code));
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_935));
+	assert_eq!(gas_left, Integer::from(79_935));
 	assert_store(&ext, 0, "6005600055000000000000000000000000000000000000000000000000000000");
 }
 
@@ -177,11 +178,11 @@ fn test_log_empty(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(99_619));
+	assert_eq!(gas_left, 99_619);
 	assert_eq!(ext.logs.len(), 1);
 	assert_eq!(ext.logs[0].topics.len(), 0);
 	assert!(ext.logs[0].data.is_empty());
@@ -209,11 +210,11 @@ fn test_log_sender(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(98_974));
+	assert_eq!(gas_left, 98_974);
 	assert_eq!(ext.logs.len(), 1);
 	assert_eq!(ext.logs[0].topics.len(), 1);
 	assert_eq!(ext.logs[0].topics[0], H256::from_str("000000000000000000000000cd1722f3947def4cf144679da39c4c32bdc35681").unwrap());
@@ -231,14 +232,14 @@ fn test_blockhash(factory: super::Factory) {
 	params.gas = U256::from(100_000);
 	params.code = Some(Arc::new(code));
 	let mut ext = FakeExt::new();
-	ext.blockhashes.insert(U256::zero(), blockhash.clone());
+	ext.blockhashes.insert(Integer::from(0), blockhash.clone());
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_974));
+	assert_eq!(gas_left, 79_974);
 	assert_eq!(ext.store.get(&H256::new()).unwrap(), &blockhash);
 }
 
@@ -256,11 +257,11 @@ fn test_calldataload(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_991));
+	assert_eq!(gas_left, 79_991);
 	assert_store(&ext, 0, "23ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff23");
 
 }
@@ -277,11 +278,11 @@ fn test_author(factory: super::Factory) {
 	ext.info.author = author;
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_995));
+	assert_eq!(gas_left, 79_995);
 	assert_store(&ext, 0, "0000000000000000000000000f572e5295c57f15886f9b263e2f6d2d6c7b5ec6");
 }
 
@@ -297,11 +298,11 @@ fn test_timestamp(factory: super::Factory) {
 	ext.info.timestamp = timestamp;
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_995));
+	assert_eq!(gas_left, 79_995);
 	assert_store(&ext, 0, "0000000000000000000000000000000000000000000000000000000000001234");
 }
 
@@ -317,17 +318,17 @@ fn test_number(factory: super::Factory) {
 	ext.info.number = number;
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_995));
+	assert_eq!(gas_left, 79_995);
 	assert_store(&ext, 0, "0000000000000000000000000000000000000000000000000000000000001234");
 }
 
 evm_test!{test_difficulty: test_difficulty_int}
 fn test_difficulty(factory: super::Factory) {
-	let difficulty = U256::from(0x1234);
+	let difficulty = Integer::from(0x1234);
 	let code = "44600055".from_hex().unwrap();
 
 	let mut params = ActionParams::default();
@@ -337,17 +338,17 @@ fn test_difficulty(factory: super::Factory) {
 	ext.info.difficulty = difficulty;
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_995));
+	assert_eq!(gas_left, Integer::from(79_995));
 	assert_store(&ext, 0, "0000000000000000000000000000000000000000000000000000000000001234");
 }
 
 evm_test!{test_gas_limit: test_gas_limit_int}
 fn test_gas_limit(factory: super::Factory) {
-	let gas_limit = U256::from(0x1234);
+	let gas_limit = Integer::from(0x1234);
 	let code = "45600055".from_hex().unwrap();
 
 	let mut params = ActionParams::default();
@@ -357,11 +358,11 @@ fn test_gas_limit(factory: super::Factory) {
 	ext.info.gas_limit = gas_limit;
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
-	assert_eq!(gas_left, U256::from(79_995));
+	assert_eq!(gas_left, 79_995);
 	assert_store(&ext, 0, "0000000000000000000000000000000000000000000000000000000000001234");
 }
 
@@ -375,12 +376,12 @@ fn test_mul(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_store(&ext, 0, "000000000000000000000000000000000000000000000000734349397b853383");
-	assert_eq!(gas_left, U256::from(79_983));
+	assert_eq!(gas_left, 79_983);
 }
 
 evm_test!{test_sub: test_sub_int}
@@ -393,12 +394,12 @@ fn test_sub(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_store(&ext, 0, "0000000000000000000000000000000000000000000000000000012364ad0302");
-	assert_eq!(gas_left, U256::from(79_985));
+	assert_eq!(gas_left, 79_985);
 }
 
 evm_test!{test_div: test_div_int}
@@ -411,12 +412,12 @@ fn test_div(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_store(&ext, 0, "000000000000000000000000000000000000000000000000000000000002e0ac");
-	assert_eq!(gas_left, U256::from(79_983));
+	assert_eq!(gas_left, 79_983);
 }
 
 evm_test!{test_div_zero: test_div_zero_int}
@@ -429,12 +430,12 @@ fn test_div_zero(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_store(&ext, 0, "0000000000000000000000000000000000000000000000000000000000000000");
-	assert_eq!(gas_left, U256::from(94_983));
+	assert_eq!(gas_left, 94_983);
 }
 
 evm_test!{test_mod: test_mod_int}
@@ -447,13 +448,13 @@ fn test_mod(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_store(&ext, 0, "0000000000000000000000000000000000000000000000000000000000076b4b");
 	assert_store(&ext, 1, "0000000000000000000000000000000000000000000000000000000000000000");
-	assert_eq!(gas_left, U256::from(74_966));
+	assert_eq!(gas_left, 74_966);
 }
 
 evm_test!{test_smod: test_smod_int}
@@ -466,13 +467,13 @@ fn test_smod(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_store(&ext, 0, "0000000000000000000000000000000000000000000000000000000000076b4b");
 	assert_store(&ext, 1, "0000000000000000000000000000000000000000000000000000000000000000");
-	assert_eq!(gas_left, U256::from(74_966));
+	assert_eq!(gas_left, 74_966);
 }
 
 evm_test!{test_sdiv: test_sdiv_int}
@@ -485,13 +486,13 @@ fn test_sdiv(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_store(&ext, 0, "000000000000000000000000000000000000000000000000000000000002e0ac");
 	assert_store(&ext, 1, "0000000000000000000000000000000000000000000000000000000000000000");
-	assert_eq!(gas_left, U256::from(74_966));
+	assert_eq!(gas_left, 74_966);
 }
 
 evm_test!{test_exp: test_exp_int}
@@ -504,14 +505,14 @@ fn test_exp(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_store(&ext, 0, "90fd23767b60204c3d6fc8aec9e70a42a3f127140879c133a20129a597ed0c59");
 	assert_store(&ext, 1, "0000000000000000000000000000000000000000000000000000012365124623");
 	assert_store(&ext, 2, "0000000000000000000000000000000000000000000000000000000000000001");
-	assert_eq!(gas_left, U256::from(39_923));
+	assert_eq!(gas_left, 39_923);
 }
 
 evm_test!{test_comparison: test_comparison_int}
@@ -524,7 +525,7 @@ fn test_comparison(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
@@ -532,7 +533,7 @@ fn test_comparison(factory: super::Factory) {
 	assert_store(&ext, 1, "0000000000000000000000000000000000000000000000000000000000000001");
 	assert_store(&ext, 2, "0000000000000000000000000000000000000000000000000000000000000000");
 	assert_store(&ext, 3, "0000000000000000000000000000000000000000000000000000000000000001");
-	assert_eq!(gas_left, U256::from(49_952));
+	assert_eq!(gas_left, 49_952);
 }
 
 evm_test!{test_signed_comparison: test_signed_comparison_int}
@@ -545,7 +546,7 @@ fn test_signed_comparison(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
@@ -553,7 +554,7 @@ fn test_signed_comparison(factory: super::Factory) {
 	assert_store(&ext, 1, "0000000000000000000000000000000000000000000000000000000000000001");
 	assert_store(&ext, 2, "0000000000000000000000000000000000000000000000000000000000000001");
 	assert_store(&ext, 3, "0000000000000000000000000000000000000000000000000000000000000000");
-	assert_eq!(gas_left, U256::from(49_940));
+	assert_eq!(gas_left, 49_940);
 }
 
 evm_test!{test_bitops: test_bitops_int}
@@ -566,7 +567,7 @@ fn test_bitops(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
@@ -576,7 +577,7 @@ fn test_bitops(factory: super::Factory) {
 	assert_store(&ext, 3, "0000000000000000000000000000000000000000000000000000000000000001");
 	assert_store(&ext, 4, "0000000000000000000000000000000000000000000000000000000000000000");
 	assert_store(&ext, 5, "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-	assert_eq!(gas_left, U256::from(44_937));
+	assert_eq!(gas_left, 44_937);
 }
 
 evm_test!{test_addmod_mulmod: test_addmod_mulmod_int}
@@ -589,7 +590,7 @@ fn test_addmod_mulmod(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
@@ -597,7 +598,7 @@ fn test_addmod_mulmod(factory: super::Factory) {
 	assert_store(&ext, 1, "000000000000000000000000000000000000000000000000000000000000000f");
 	assert_store(&ext, 2, "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 	assert_store(&ext, 3, "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-	assert_eq!(gas_left, U256::from(19_914));
+	assert_eq!(gas_left, 19_914);
 }
 
 evm_test!{test_byte: test_byte_int}
@@ -610,13 +611,13 @@ fn test_byte(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_store(&ext, 0, "0000000000000000000000000000000000000000000000000000000000000000");
 	assert_store(&ext, 1, "00000000000000000000000000000000000000000000000000000000000000ff");
-	assert_eq!(gas_left, U256::from(74_976));
+	assert_eq!(gas_left, 74_976);
 }
 
 evm_test!{test_signextend: test_signextend_int}
@@ -629,13 +630,13 @@ fn test_signextend(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_store(&ext, 0, "0000000000000000000000000000000000000000000000000000000000000fff");
 	assert_store(&ext, 1, "00000000000000000000000000000000000000000000000000000000000000ff");
-	assert_eq!(gas_left, U256::from(59_972));
+	assert_eq!(gas_left, 59_972);
 }
 
 #[test] // JIT just returns out of gas
@@ -649,7 +650,7 @@ fn test_badinstruction_int() {
 	let mut ext = FakeExt::new();
 
 	let err = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap_err()
 	};
 
@@ -669,12 +670,12 @@ fn test_pop(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_store(&ext, 0, "00000000000000000000000000000000000000000000000000000000000000f0");
-	assert_eq!(gas_left, U256::from(79_989));
+	assert_eq!(gas_left, 79_989);
 }
 
 evm_test!{test_extops: test_extops_int}
@@ -684,12 +685,12 @@ fn test_extops(factory: super::Factory) {
 	let mut params = ActionParams::default();
 	params.gas = U256::from(150_000);
 	params.gas_price = U256::from(0x32);
-	params.value = ActionValue::Transfer(U256::from(0x99));
+	params.value = ActionValue::Transfer(Integer::from(0x99));
 	params.code = Some(Arc::new(code));
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
@@ -699,7 +700,7 @@ fn test_extops(factory: super::Factory) {
 	assert_store(&ext, 3, "0000000000000000000000000000000000000000000000000000000000000020"); // CODESIZE
 	assert_store(&ext, 4, "0000000000000000000000000000000000000000000000000000000000000099"); // CALLVALUE
 	assert_store(&ext, 5, "0000000000000000000000000000000000000000000000000000000000000032");
-	assert_eq!(gas_left, U256::from(29_898));
+	assert_eq!(gas_left, 29_898);
 }
 
 evm_test!{test_jumps: test_jumps_int}
@@ -712,14 +713,14 @@ fn test_jumps(factory: super::Factory) {
 	let mut ext = FakeExt::new();
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_eq!(ext.sstore_clears, ext.schedule().sstore_refund_gas as i128);
 	assert_store(&ext, 0, "0000000000000000000000000000000000000000000000000000000000000000"); // 5!
 	assert_store(&ext, 1, "0000000000000000000000000000000000000000000000000000000000000078"); // 5!
-	assert_eq!(gas_left, U256::from(54_117));
+	assert_eq!(gas_left, 54_117);
 }
 
 evm_test!{test_calls: test_calls_int}
@@ -729,42 +730,43 @@ fn test_calls(factory: super::Factory) {
 	let address = Address::from(0x155);
 	let code_address = Address::from(0x998);
 	let mut params = ActionParams::default();
-	params.gas = U256::from(150_000);
+	let gas = 150_000;
+	params.gas = U256::from(gas);
 	params.code = Some(Arc::new(code));
 	params.address = address.clone();
 	let mut ext = FakeExt::new();
 	ext.balances = {
 		let mut s = HashMap::new();
-		s.insert(params.address.clone(), params.gas);
+		s.insert(params.address.clone(), Integer::from(gas));
 		s
 	};
 
 	let gas_left = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 
 	assert_set_contains(&ext.calls, &FakeCall {
 		call_type: FakeCallType::Call,
 		create_scheme: None,
-		gas: U256::from(2556),
+		gas: Integer::from(2556),
 		sender_address: Some(address.clone()),
 		receive_address: Some(code_address.clone()),
-		value: Some(U256::from(0x50)),
+		value: Some(Integer::from(0x50)),
 		data: vec!(),
 		code_address: Some(code_address.clone())
 	});
 	assert_set_contains(&ext.calls, &FakeCall {
 		call_type: FakeCallType::Call,
 		create_scheme: None,
-		gas: U256::from(2556),
+		gas: Integer::from(2556),
 		sender_address: Some(address.clone()),
 		receive_address: Some(address.clone()),
-		value: Some(U256::from(0x50)),
+		value: Some(Integer::from(0x50)),
 		data: vec!(),
 		code_address: Some(code_address.clone())
 	});
-	assert_eq!(gas_left, U256::from(91_405));
+	assert_eq!(gas_left, 91_405);
 	assert_eq!(ext.calls.len(), 2);
 }
 
@@ -781,7 +783,7 @@ fn test_create_in_staticcall(factory: super::Factory) {
 	ext.is_static = true;
 
 	let err = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap_err()
 	};
 
@@ -1049,7 +1051,7 @@ fn push_two_pop_one_constantinople_test(factory: &super::Factory, opcode: u8, pu
 	let mut ext = FakeExt::new_constantinople();
 
 	let _ = {
-		let mut vm = factory.create(params, ext.schedule(), ext.depth());
+		let vm = factory.create(params, ext.schedule(), ext.depth());
 		test_finalize(vm.exec(&mut ext).ok().unwrap()).unwrap()
 	};
 

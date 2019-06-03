@@ -28,10 +28,12 @@ extern crate keccak_hash as hash;
 extern crate memory_cache;
 extern crate parity_bytes as bytes;
 extern crate rustc_hex;
+extern crate rug;
 
 use criterion::{Criterion, Bencher, black_box};
 use std::str::FromStr;
 use std::sync::Arc;
+use rug::Integer;
 use bytes::Bytes;
 use ethereum_types::{U256, Address};
 use vm::{ActionParams, Result, GasLeft, Ext};
@@ -173,11 +175,11 @@ fn mem_gas_calculation_increasing(gas: U256, b: &mut Bencher) {
 	});
 }
 
-fn result(r: Result<evm::GasLeft>) -> U256 {
+fn result(r: Result<evm::GasLeft>) -> Integer {
 	match r {
 		Ok(GasLeft::Known(gas_left)) => gas_left,
 		Ok(GasLeft::NeedsReturn { gas_left,  .. }) => gas_left,
-		_ => U256::zero(),
+		_ => Integer::from(0),
 	}
 }
 

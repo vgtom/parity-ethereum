@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity Ethereum.  If not, see <http://www.gnu.org/licenses/>.
 
+extern crate rug;
 extern crate rustc_hex;
 extern crate serde;
 extern crate serde_json;

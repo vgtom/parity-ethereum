@@ -16,8 +16,8 @@
 
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
-
-use ethereum_types::{U256, H256, Address};
+use rug::Integer;
+use ethereum_types::{H256, Address};
 use bytes::Bytes;
 use {
 	CallType, Schedule, EnvInfo,
@@ -41,10 +41,10 @@ pub enum FakeCallType {
 pub struct FakeCall {
 	pub call_type: FakeCallType,
 	pub create_scheme: Option<CreateContractAddress>,
-	pub gas: U256,
+	pub gas: Integer,
 	pub sender_address: Option<Address>,
 	pub receive_address: Option<Address>,
-	pub value: Option<U256>,
+	pub value: Option<Integer>,
 	pub data: Bytes,
 	pub code_address: Option<Address>,
 }
@@ -59,18 +59,18 @@ pub struct FakeExt {
 	pub calls: HashSet<FakeCall>,
 	pub sstore_clears: i128,
 	pub depth: usize,
-	pub blockhashes: HashMap<U256, H256>,
+	pub blockhashes: HashMap<Integer, H256>,
 	pub codes: HashMap<Address, Arc<Bytes>>,
 	pub logs: Vec<FakeLogEntry>,
 	pub info: EnvInfo,
 	pub schedule: Schedule,
-	pub balances: HashMap<Address, U256>,
+	pub balances: HashMap<Address, Integer>,
 	pub tracing: bool,
 	pub is_static: bool,
 }
 
 // similar to the normal `finalize` function, but ignoring NeedsReturn.
-pub fn test_finalize(res: Result<GasLeft>) -> Result<U256> {
+pub fn test_finalize(res: Result<GasLeft>) -> Result<Integer> {
 	match res {
 		Ok(GasLeft::Known(gas)) => Ok(gas),
 		Ok(GasLeft::NeedsReturn{..}) => unimplemented!(), // since ret is unimplemented.
@@ -124,25 +124,25 @@ impl Ext for FakeExt {
 	}
 
 	fn exists_and_not_null(&self, address: &Address) -> Result<bool> {
-		Ok(self.balances.get(address).map_or(false, |b| !b.is_zero()))
+		Ok(self.balances.get(address).map_or(false, |b| b != &0))
 	}
 
-	fn origin_balance(&self) -> Result<U256> {
+	fn origin_balance(&self) -> Result<Integer> {
 		unimplemented!()
 	}
 
-	fn balance(&self, address: &Address) -> Result<U256> {
-		Ok(self.balances[address])
+	fn balance(&self, address: &Address) -> Result<Integer> {
+		Ok(self.balances[address].clone())
 	}
 
-	fn blockhash(&mut self, number: &U256) -> H256 {
+	fn blockhash(&mut self, number: &Integer) -> H256 {
 		self.blockhashes.get(number).unwrap_or(&H256::new()).clone()
 	}
 
 	fn create(
 		&mut self,
-		gas: &U256,
-		value: &U256,
+		gas: &Integer,
+		value: &Integer,
 		code: &[u8],
 		address: CreateContractAddress,
 		_trap: bool,
@@ -150,10 +150,10 @@ impl Ext for FakeExt {
 		self.calls.insert(FakeCall {
 			call_type: FakeCallType::Create,
 			create_scheme: Some(address),
-			gas: *gas,
+			gas: gas.clone(),
 			sender_address: None,
 			receive_address: None,
-			value: Some(*value),
+			value: Some(value.clone()),
 			data: code.to_vec(),
 			code_address: None
 		});
@@ -163,10 +163,10 @@ impl Ext for FakeExt {
 
 	fn call(
 		&mut self,
-		gas: &U256,
+		gas: &Integer,
 		sender_address: &Address,
 		receive_address: &Address,
-		value: Option<U256>,
+		value: Option<Integer>,
 		data: &[u8],
 		code_address: &Address,
 		_call_type: CallType,
@@ -175,7 +175,7 @@ impl Ext for FakeExt {
 		self.calls.insert(FakeCall {
 			call_type: FakeCallType::Call,
 			create_scheme: None,
-			gas: *gas,
+			gas: gas.clone(),
 			sender_address: Some(sender_address.clone()),
 			receive_address: Some(receive_address.clone()),
 			value: value,
@@ -183,7 +183,7 @@ impl Ext for FakeExt {
 			code_address: Some(code_address.clone())
 		});
 		// TODO: support traps in testing.
-		Ok(MessageCallResult::Success(*gas, ReturnData::empty()))
+		Ok(MessageCallResult::Success(gas.clone(), ReturnData::empty()))
 	}
 
 	fn extcode(&self, address: &Address) -> Result<Option<Arc<Bytes>>> {
@@ -206,7 +206,7 @@ impl Ext for FakeExt {
 		Ok(())
 	}
 
-	fn ret(self, _gas: &U256, _data: &ReturnData, _apply_state: bool) -> Result<U256> {
+	fn ret(self, _gas: &Integer, _data: &ReturnData, _apply_state: bool) -> Result<Integer> {
 		unimplemented!();
 	}
 
@@ -239,7 +239,7 @@ impl Ext for FakeExt {
 		self.sstore_clears -= value as i128;
 	}
 
-	fn trace_next_instruction(&mut self, _pc: usize, _instruction: u8, _gas: U256) -> bool {
+	fn trace_next_instruction(&mut self, _pc: usize, _instruction: u8, _gas: &Integer) -> bool {
 		self.tracing
 	}
 }

@@ -16,6 +16,7 @@
 
 //! Evm input params.
 use ethereum_types::{U256, H256, Address};
+use rug::Integer;
 use bytes::Bytes;
 use hash::{keccak, KECCAK_EMPTY};
 use ethjson;
@@ -28,9 +29,9 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub enum ActionValue {
 	/// Value that should be transfered
-	Transfer(U256),
+	Transfer(Integer),
 	/// Apparent value for transaction (not transfered)
-	Apparent(U256)
+	Apparent(Integer)
 }
 
 /// Type of the way parameters encoded
@@ -44,19 +45,19 @@ pub enum ParamsType {
 
 impl ActionValue {
 	/// Returns action value as U256.
-	pub fn value(&self) -> U256 {
-		match *self {
-			ActionValue::Transfer(x) | ActionValue::Apparent(x) => x
+	pub fn value(&self) -> Integer {
+		match self {
+			ActionValue::Transfer(x) | ActionValue::Apparent(x) => x.clone()
 		}
 	}
 
 	/// Returns the transfer action value of the U256-convertable raw value
-	pub fn transfer<T: Into<U256>>(transfer_value: T) -> ActionValue {
+	pub fn transfer<T: Into<Integer>>(transfer_value: T) -> ActionValue {
 		ActionValue::Transfer(transfer_value.into())
 	}
 
 	/// Returns the apparent action value of the U256-convertable raw value
-	pub fn apparent<T: Into<U256>>(apparent_value: T) -> ActionValue {
+	pub fn apparent<T: Into<Integer>>(apparent_value: T) -> ActionValue {
 		ActionValue::Apparent(apparent_value.into())
 	}
 }
@@ -103,7 +104,7 @@ impl Default for ActionParams {
 			origin: Address::new(),
 			gas: U256::zero(),
 			gas_price: U256::zero(),
-			value: ActionValue::Transfer(U256::zero()),
+			value: ActionValue::Transfer(Integer::from(0)),
 			code: None,
 			data: None,
 			call_type: CallType::None,

@@ -16,7 +16,7 @@
 
 //! Evm interface.
 
-use ethereum_types::U256;
+use rug::Integer;
 use vm::{Ext, Result, ReturnData, GasLeft, Error};
 
 /// Finalization result. Gas Left: either it is a known value, or it needs to be computed by processing
@@ -24,7 +24,7 @@ use vm::{Ext, Result, ReturnData, GasLeft, Error};
 #[derive(Debug)]
 pub struct FinalizationResult {
 	/// Final amount of gas left.
-	pub gas_left: U256,
+	pub gas_left: Integer,
 	/// Apply execution state changes or revert them.
 	pub apply_state: bool,
 	/// Return data buffer.
@@ -43,7 +43,7 @@ pub trait Finalize {
 impl Finalize for Result<GasLeft> {
 	fn finalize<E: Ext>(self, ext: E) -> Result<FinalizationResult> {
 		match self {
-			Ok(GasLeft::Known(gas_left)) => Ok(FinalizationResult { gas_left: gas_left, apply_state: true, return_data: ReturnData::empty() }),
+			Ok(GasLeft::Known(gas_left)) => Ok(FinalizationResult { gas_left, apply_state: true, return_data: ReturnData::empty() }),
 			Ok(GasLeft::NeedsReturn { gas_left, data, apply_state }) => ext.ret(&gas_left, &data, apply_state).map(|gas_left| FinalizationResult {
 				gas_left: gas_left,
 				apply_state: apply_state,

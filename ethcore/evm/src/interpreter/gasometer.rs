@@ -150,7 +150,7 @@ impl Gasometer {
 			instructions::SUICIDE => {
 				let mut gas = Integer::from(schedule.suicide_gas);
 
-				let is_value_transfer = !ext.origin_balance()?.is_zero();
+				let is_value_transfer = ext.origin_balance()? != 0;
 				let address = integer_to_address(stack.peek(0));
 				if (
 					!schedule.no_empty && !ext.exists(&address)?

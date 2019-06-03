@@ -18,6 +18,7 @@
 
 use std::cmp;
 use std::sync::Arc;
+use rug::Integer;
 use hash::keccak;
 use ethereum_types::{U256, H256, Address};
 use ethjson;
@@ -38,9 +39,9 @@ pub struct EnvInfo {
 	/// The block timestamp.
 	pub timestamp: u64,
 	/// The block difficulty.
-	pub difficulty: U256,
+	pub difficulty: Integer,
 	/// The block gas limit.
-	pub gas_limit: U256,
+	pub gas_limit: Integer,
 	/// The last 256 block hashes.
 	pub last_hashes: Arc<LastHashes>,
 	/// The gas used.

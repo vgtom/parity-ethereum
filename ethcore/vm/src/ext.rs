@@ -17,7 +17,8 @@
 //! Interface for Evm externalities.
 
 use std::sync::Arc;
-use ethereum_types::{U256, H256, Address};
+use rug::Integer;
+use ethereum_types::{H256, Address};
 use bytes::Bytes;
 use call_type::CallType;
 use env_info::EnvInfo;
@@ -30,12 +31,12 @@ use error::{Result, TrapKind};
 pub enum ContractCreateResult {
 	/// Returned when creation was successfull.
 	/// Contains an address of newly created contract and gas left.
-	Created(Address, U256),
+	Created(Address, Integer),
 	/// Returned when contract creation failed.
 	/// VM doesn't have to know the reason.
 	Failed,
 	/// Reverted with REVERT.
-	Reverted(U256, ReturnData),
+	Reverted(Integer, ReturnData),
 }
 
 #[derive(Debug)]
@@ -43,13 +44,13 @@ pub enum ContractCreateResult {
 pub enum MessageCallResult {
 	/// Returned when message call was successfull.
 	/// Contains gas left and output data.
-	Success(U256, ReturnData),
+	Success(Integer, ReturnData),
 	/// Returned when message call failed.
 	/// VM doesn't have to know the reason.
 	Failed,
 	/// Returned when message call was reverted.
 	/// Contains gas left and output data.
-	Reverted(U256, ReturnData),
+	Reverted(Integer, ReturnData),
 }
 
 /// Specifies how an address is calculated for a new contract.
@@ -81,21 +82,21 @@ pub trait Ext {
 	fn exists_and_not_null(&self, address: &Address) -> Result<bool>;
 
 	/// Balance of the origin account.
-	fn origin_balance(&self) -> Result<U256>;
+	fn origin_balance(&self) -> Result<Integer>;
 
 	/// Returns address balance.
-	fn balance(&self, address: &Address) -> Result<U256>;
+	fn balance(&self, address: &Address) -> Result<Integer>;
 
 	/// Returns the hash of one of the 256 most recent complete blocks.
-	fn blockhash(&mut self, number: &U256) -> H256;
+	fn blockhash(&mut self, number: &Integer) -> H256;
 
 	/// Creates new contract.
 	///
 	/// Returns gas_left and contract address if contract creation was succesfull.
 	fn create(
 		&mut self,
-		gas: &U256,
-		value: &U256,
+		gas: &Integer,
+		value: &Integer,
 		code: &[u8],
 		address: CreateContractAddress,
 		trap: bool,
@@ -108,10 +109,10 @@ pub trait Ext {
 	/// and true if subcall was successfull.
 	fn call(
 		&mut self,
-		gas: &U256,
+		gas: &Integer,
 		sender_address: &Address,
 		receive_address: &Address,
-		value: Option<U256>,
+		value: Option<Integer>,
 		data: &[u8],
 		code_address: &Address,
 		call_type: CallType,
@@ -132,7 +133,7 @@ pub trait Ext {
 
 	/// Should be called when transaction calls `RETURN` opcode.
 	/// Returns gas_left if cost of returning the data is not too high.
-	fn ret(self, gas: &U256, data: &ReturnData, apply_state: bool) -> Result<U256>;
+	fn ret(self, gas: &Integer, data: &ReturnData, apply_state: bool) -> Result<Integer>;
 
 	/// Should be called when contract commits suicide.
 	/// Address to which funds should be refunded.
@@ -157,13 +158,13 @@ pub trait Ext {
 	fn sub_sstore_refund(&mut self, value: usize);
 
 	/// Decide if any more operations should be traced. Passthrough for the VM trace.
-	fn trace_next_instruction(&mut self, _pc: usize, _instruction: u8, _current_gas: U256) -> bool { false }
+	fn trace_next_instruction(&mut self, _pc: usize, _instruction: u8, _current_gas: &Integer) -> bool { false }
 
 	/// Prepare to trace an operation. Passthrough for the VM trace.
-	fn trace_prepare_execute(&mut self, _pc: usize, _instruction: u8, _gas_cost: U256, _mem_written: Option<(usize, usize)>, _store_written: Option<(U256, U256)>) {}
+	fn trace_prepare_execute(&mut self, _pc: usize, _instruction: u8, _gas_cost: &Integer, _mem_written: Option<(usize, usize)>, _store_written: Option<(Integer, Integer)>) {}
 
 	/// Trace the finalised execution of a single instruction.
-	fn trace_executed(&mut self, _gas_used: U256, _stack_push: &[U256], _mem: &[u8]) {}
+	fn trace_executed(&mut self, _gas_used: &Integer, _stack_push: &[Integer], _mem: &[u8]) {}
 
 	/// Check if running in static context.
 	fn is_static(&self) -> bool;

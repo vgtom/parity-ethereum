@@ -18,13 +18,26 @@
 
 use std::fmt;
 use std::str::FromStr;
+use rug::{Integer, integer::Order};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{Error, Visitor, Unexpected};
 use ethereum_types::U256;
 
+#[cfg(target_endian = "big")]
+const ENDIANNESS: Order = Order::LsfBe;
+#[cfg(not(target_endian = "big"))]
+const ENDIANNESS: Order = Order::LsfLe;
+
 /// Lenient uint json deserialization for test json files.
 #[derive(Default, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub struct Uint(pub U256);
+
+impl Into<Integer> for Uint {
+	fn into(self) -> Integer {
+		let U256(n_u64s) = self.0;
+		Integer::from_digits(&n_u64s, ENDIANNESS)
+	}
+}
 
 impl Into<U256> for Uint {
 	fn into(self) -> U256 {
