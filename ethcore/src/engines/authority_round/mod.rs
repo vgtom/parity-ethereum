@@ -1300,26 +1300,22 @@ impl Engine<EthereumMachine> for AuthorityRound {
 
 	/// Make calls to the randomness and validator set contracts.
 	fn on_prepare_block(&self, block: &ExecutedBlock) -> Result<Vec<SignedTransaction>, Error> {
-		// Genesis is never a new block, but might as well check.
-		let header = block.header().clone();
-		let first = header.number() == 0;
+		let opt_signer = self.signer.read();
+		let signer = match opt_signer.as_ref() {
+			Some(signer) => signer,
+			None => return Ok(Vec::new()), // We are not a validator, so we shouldn't call the contracts.
+		};
 
 		let client = self.client.read().as_ref().and_then(|weak| weak.upgrade()).ok_or_else(|| {
 			debug!(target: "engine", "Unable to prepare block: missing client ref.");
 			EngineError::RequiresClient
 		})?;
 		let full_client = client.as_full_client()
-			.ok_or(EngineError::FailedSystemCall("Failed to upgrade to BlockchainClient.".to_string()))?;
+			.ok_or_else(|| EngineError::FailedSystemCall("Failed to upgrade to BlockchainClient.".to_string()))?;
 
 		// Makes a constant contract call.
 		let mut call = |to: Address, data: Bytes| {
 			full_client.call_contract(BlockId::Latest, to, data).map_err(|e| format!("{}", e))
-		};
-
-		let opt_signer = self.signer.read();
-		let signer = match opt_signer.as_ref() {
-			Some(signer) => signer,
-			None => return Ok(Vec::new()), // We are not a validator, so we shouldn't call the contracts.
 		};
 
 		// Our current account nonce. The transactions must have consecutive nonces, starting with this one.
@@ -1346,6 +1342,9 @@ impl Engine<EthereumMachine> for AuthorityRound {
 			}
 		}
 
+		let header = block.header().clone();
+		// Genesis is never a new block, but might as well check.
+		let first = header.number() == 0;
 		for (addr, data) in self.validators.on_prepare_block(first, &header, &mut call)? {
 			transactions.push(make_transaction(addr, data)?);
 		}
