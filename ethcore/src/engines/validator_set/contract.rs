@@ -25,6 +25,7 @@ use machine::{AuxiliaryData, Call, EthereumMachine};
 use parking_lot::RwLock;
 use types::BlockNumber;
 use types::ids::BlockId;
+use types::encoded;
 use types::header::Header;
 use types::transaction::{self, Action};
 
@@ -40,38 +41,60 @@ pub struct ValidatorContract {
 	contract_address: Address,
 	validators: ValidatorSafeContract,
 	client: RwLock<Option<Weak<dyn EngineClient>>>, // TODO [keorn]: remove
+	/// If set, this is the block number at which the consensus engine switches from AuRa to AuRa
+	/// with POSDAO modifications.
+	posdao_transition: Option<BlockNumber>,
 }
 
 impl ValidatorContract {
-	pub fn new(contract_address: Address) -> Self {
+	pub fn new(contract_address: Address, posdao_transition: Option<BlockNumber>) -> Self {
 		ValidatorContract {
 			contract_address,
-			validators: ValidatorSafeContract::new(contract_address),
+			validators: ValidatorSafeContract::new(contract_address, posdao_transition),
 			client: RwLock::new(None),
+			posdao_transition,
 		}
 	}
 }
 
 impl ValidatorContract {
-	fn transact(&self, data: Bytes) -> Result<(), ::error::Error> {
+	fn transact(&self, data: Bytes, zero_gas_price: bool) -> Result<(), ::error::Error> {
 		let client = self.client.read().as_ref().and_then(Weak::upgrade).ok_or("No client!")?;
 		let full_client = client.as_full_client().ok_or("No full client!")?;
-		match full_client.transact(Action::Call(self.contract_address), data, None, Some(0.into()), None) {
+		let gas_price = if zero_gas_price {
+			Some(0.into())
+		} else {
+			None
+		};
+		match full_client.transact(Action::Call(self.contract_address), data, None, gas_price, None) {
 			Ok(()) | Err(transaction::Error::AlreadyImported) => Ok(()),
 			Err(e) => Err(e)?,
 		}
 	}
 
-	fn do_report_malicious(&self, address: &Address, block: BlockNumber, proof: Bytes) -> Result<(), ::error::Error> {
+	fn latest_block_header(&self) -> Result<encoded::Header, ::error::Error> {
 		let client = self.client.read().as_ref().and_then(Weak::upgrade).ok_or("No client!")?;
-		let latest = client.block_header(BlockId::Latest).ok_or("No latest block!")?;
+		client.block_header(BlockId::Latest).ok_or("No latest block!".into())
+	}
+
+	fn do_report_malicious(
+		&self,
+		address: &Address,
+		block: BlockNumber,
+		proof: Bytes,
+	) -> Result<(), ::error::Error> {
+		let latest = self.latest_block_header()?;
 		if !self.contains(&latest.parent_hash(), address) {
 			warn!(target: "engine", "Not reporting {} on block {}: Not a validator", address, block);
 			return Ok(());
 		}
 		let data = validator_report::functions::report_malicious::encode_input(*address, block, proof);
 		self.validators.queue_report((*address, block, data.clone()));
-		self.transact(data)?;
+		let zero_gas_price = self.posdao_transition.map_or(
+			false,
+			|block_num| block_num <= latest.number()
+		);
+		self.transact(data, zero_gas_price)?;
 		warn!(target: "engine", "Reported malicious validator {} at block {}", address, block);
 		Ok(())
 	}
@@ -138,13 +161,29 @@ impl ValidatorSet for ValidatorContract {
 
 	fn report_benign(&self, address: &Address, _set_block: BlockNumber, block: BlockNumber) {
 		let data = validator_report::functions::report_benign::encode_input(*address, block);
-		match self.transact(data) {
+		let latest = self.latest_block_header();
+		let latest_num = if let Ok(header) = latest {
+			header.number()
+		} else {
+			warn!(
+				target: "engine",
+				"Latest block header could not be found for a benign report on {} at block {}",
+				address,
+				block
+			);
+			block
+		};
+		let zero_gas_price = self.posdao_transition.map_or(
+			false,
+			|block_num| block_num <= latest_num
+		);
+		match self.transact(data, zero_gas_price) {
 			Ok(()) => warn!(target: "engine", "Reported benign validator misbehaviour {}", address),
 			Err(s) => warn!(target: "engine", "Validator {} could not be reported {}", address, s),
 		}
 	}
 
-	fn register_client(&self, client: Weak<EngineClient>) {
+	fn register_client(&self, client: Weak<dyn EngineClient>) {
 		self.validators.register_client(client.clone());
 		*self.client.write() = Some(client);
 	}
@@ -173,7 +212,10 @@ mod tests {
 	#[test]
 	fn fetches_validators() {
 		let client = generate_dummy_client_with_spec(Spec::new_validator_contract);
-		let vc = Arc::new(ValidatorContract::new("0000000000000000000000000000000000000005".parse::<Address>().unwrap()));
+		let vc = Arc::new(ValidatorContract::new(
+			"0000000000000000000000000000000000000005".parse::<Address>().unwrap(),
+			None
+		));
 		vc.register_client(Arc::downgrade(&client) as _);
 		let last_hash = client.best_block_header().hash();
 		assert!(vc.contains(&last_hash, &"7d577a597b2742b498cb5cf0c26cdcd726d39e6e".parse::<Address>().unwrap()));

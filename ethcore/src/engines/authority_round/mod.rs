@@ -17,7 +17,7 @@
 //! A blockchain engine that supports a non-instant BFT proof-of-authority.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::{cmp, fmt};
+use std::{cmp::{self, Ordering}, fmt};
 use std::iter::{self, FromIterator};
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, AtomicBool, Ordering as AtomicOrdering};
@@ -36,7 +36,7 @@ use ethjson::{spec::StepDuration};
 use machine::{AuxiliaryData, Call, EthereumMachine};
 use hash::keccak;
 use super::signer::EngineSigner;
-use super::validator_set::{ValidatorSet, SimpleList, new_validator_set};
+use super::validator_set::{ValidatorSet, SimpleList, new_validator_set_posdao};
 use self::finality::RollingFinality;
 use ethkey::{self, Signature};
 use io::{IoContext, IoHandler, TimerToken, IoService};
@@ -72,7 +72,7 @@ pub struct AuthorityRoundParams {
 	/// Starting step,
 	pub start_step: Option<u64>,
 	/// Valid validators.
-	pub validators: Box<ValidatorSet>,
+	pub validators: Box<dyn ValidatorSet>,
 	/// Chain score validation transition block.
 	pub validate_score_transition: u64,
 	/// Monotonic step validation transition block.
@@ -97,6 +97,9 @@ pub struct AuthorityRoundParams {
 	pub strict_empty_steps_transition: u64,
 	/// If set, enables random number contract integration.
 	pub randomness_contract_address: Option<Address>,
+	/// If set, this is the block number at which the consensus engine switches from AuRa to AuRa
+	/// with POSDAO modifications.
+	pub posdao_transition: Option<BlockNumber>,
 }
 
 const U16_MAX: usize = ::std::u16::MAX as usize;
@@ -148,7 +151,7 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 
 		AuthorityRoundParams {
 			step_durations,
-			validators: new_validator_set(p.validators),
+			validators: new_validator_set_posdao(p.validators, p.posdao_transition.map(Into::into)),
 			start_step: p.start_step.map(Into::into),
 			validate_score_transition: p.validate_score_transition.map_or(0, Into::into),
 			validate_step_transition: p.validate_step_transition.map_or(0, Into::into),
@@ -157,11 +160,12 @@ impl From<ethjson::spec::AuthorityRoundParams> for AuthorityRoundParams {
 			block_reward_contract_transitions: br_transitions,
 			maximum_uncle_count_transition: p.maximum_uncle_count_transition.map_or(0, Into::into),
 			maximum_uncle_count: p.maximum_uncle_count.map_or(0, Into::into),
-			empty_steps_transition: p.empty_steps_transition.map_or(u64::max_value(), |n| ::std::cmp::max(n.into(), 1)),
+			empty_steps_transition: p.empty_steps_transition.map_or(u64::max_value(), |n| cmp::max(n.into(), 1)),
 			maximum_empty_steps: p.maximum_empty_steps.map_or(0, Into::into),
 			quorum_2_3_transition: p.quorum_2_3_transition.map_or_else(BlockNumber::max_value, Into::into),
 			strict_empty_steps_transition: p.strict_empty_steps_transition.map_or(0, Into::into),
 			randomness_contract_address: p.randomness_contract_address.map(Into::into),
+			posdao_transition: p.posdao_transition.map(Into::into),
 		}
 	}
 }
@@ -309,9 +313,9 @@ impl EpochManager {
 	// Zooms to the epoch after the header with the given hash. Returns true if succeeded, false otherwise.
 	fn zoom_to_after(
 		&mut self,
-		client: &EngineClient,
+		client: &dyn EngineClient,
 		machine: &EthereumMachine,
-		validators: &ValidatorSet,
+		validators: &dyn ValidatorSet,
 		hash: H256
 	) -> bool {
 		let last_was_parent = self.finality_checker.subchain_head() == Some(hash);
@@ -392,12 +396,12 @@ struct EmptyStep {
 }
 
 impl PartialOrd for EmptyStep {
-	fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
 		Some(self.cmp(other))
 	}
 }
 impl Ord for EmptyStep {
-	fn cmp(&self, other: &Self) -> cmp::Ordering {
+	fn cmp(&self, other: &Self) -> Ordering {
 		self.step.cmp(&other.step)
 			.then_with(|| self.parent_hash.cmp(&other.parent_hash))
 			.then_with(|| self.signature.cmp(&other.signature))
@@ -412,7 +416,7 @@ impl EmptyStep {
 		EmptyStep { signature, step, parent_hash }
 	}
 
-	fn verify(&self, validators: &ValidatorSet) -> Result<bool, Error> {
+	fn verify(&self, validators: &dyn ValidatorSet) -> Result<bool, Error> {
 		let message = keccak(empty_step_rlp(self.step, &self.parent_hash));
 		let correct_proposer = step_proposer(validators, &self.parent_hash, self.step);
 
@@ -507,9 +511,9 @@ struct PermissionedStep {
 pub struct AuthorityRound {
 	transition_service: IoService<()>,
 	step: Arc<PermissionedStep>,
-	client: Arc<RwLock<Option<Weak<EngineClient>>>>,
-	signer: RwLock<Option<Box<EngineSigner>>>,
-	validators: Box<ValidatorSet>,
+	client: Arc<RwLock<Option<Weak<dyn EngineClient>>>>,
+	signer: RwLock<Option<Box<dyn EngineSigner>>>,
+	validators: Box<dyn ValidatorSet>,
 	validate_score_transition: u64,
 	validate_step_transition: u64,
 	empty_steps: Mutex<BTreeSet<EmptyStep>>,
@@ -526,6 +530,9 @@ pub struct AuthorityRound {
 	machine: EthereumMachine,
 	/// If set, enables random number contract integration.
 	randomness_contract_address: Option<Address>,
+	/// The block number at which the consensus engine switches from AuRa to AuRa with POSDAO
+	/// modifications.
+	posdao_transition: Option<BlockNumber>,
 }
 
 // header-chain validator.
@@ -653,13 +660,13 @@ fn header_empty_steps_signers(header: &Header, empty_steps_transition: u64) -> R
 	}
 }
 
-fn step_proposer(validators: &ValidatorSet, bh: &H256, step: u64) -> Address {
+fn step_proposer(validators: &dyn ValidatorSet, bh: &H256, step: u64) -> Address {
 	let proposer = validators.get(bh, step as usize);
 	trace!(target: "engine", "Fetched proposer for step {}: {}", step, proposer);
 	proposer
 }
 
-fn is_step_proposer(validators: &ValidatorSet, bh: &H256, step: u64, address: &Address) -> bool {
+fn is_step_proposer(validators: &dyn ValidatorSet, bh: &H256, step: u64, address: &Address) -> bool {
 	step_proposer(validators, bh, step) == *address
 }
 
@@ -687,7 +694,7 @@ fn verify_timestamp(step: &Step, header_step: u64) -> Result<(), BlockError> {
 	}
 }
 
-fn verify_external(header: &Header, validators: &ValidatorSet, empty_steps_transition: u64) -> Result<(), Error> {
+fn verify_external(header: &Header, validators: &dyn ValidatorSet, empty_steps_transition: u64) -> Result<(), Error> {
 	let header_step = header_step(header, empty_steps_transition)?;
 
 	let proposer_signature = header_signature(header, empty_steps_transition)?;
@@ -794,6 +801,7 @@ impl AuthorityRound {
 				strict_empty_steps_transition: our_params.strict_empty_steps_transition,
 				machine: machine,
 				randomness_contract_address: our_params.randomness_contract_address,
+				posdao_transition: our_params.posdao_transition,
 			});
 
 		// Do not initialize timeouts for tests.
@@ -988,7 +996,7 @@ fn unix_now() -> Duration {
 
 struct TransitionHandler {
 	step: Arc<PermissionedStep>,
-	client: Arc<RwLock<Option<Weak<EngineClient>>>>,
+	client: Arc<RwLock<Option<Weak<dyn EngineClient>>>>,
 }
 
 const ENGINE_TIMEOUT_TOKEN: TimerToken = 23;
@@ -1316,6 +1324,19 @@ impl Engine<EthereumMachine> for AuthorityRound {
 
 	/// Applies the block reward on finalisation of the block.
 	fn on_close_block(&self, block: &mut ExecutedBlock) -> Result<(), Error> {
+		const TRACE_MSG: &str = "calls to POSDAO randomness and validator set contracts";
+		if let Some(block_num) = self.posdao_transition {
+			match block_num.cmp(&block.header().number()) {
+				Ordering::Greater => {
+					trace!(target: "engine", "Postponing {}", TRACE_MSG);
+				}
+				Ordering::Equal => {
+					info!(target: "engine", "Starting {}", TRACE_MSG);
+				}
+				_ => {}
+			}
+		}
+
 		let mut beneficiaries = Vec::new();
 
 		if block.header().number() == self.quorum_2_3_transition {
@@ -1376,6 +1397,11 @@ impl Engine<EthereumMachine> for AuthorityRound {
 
 	/// Make calls to the randomness and validator set contracts.
 	fn on_prepare_block(&self, block: &ExecutedBlock) -> Result<Vec<SignedTransaction>, Error> {
+		// Skip the rest of the function unless there has been a transition to POSDAO AuRa.
+		if self.posdao_transition.map_or(true, |block_num| block.header().number() < block_num) {
+			trace!(target: "engine", "Skipping calls to POSDAO randomness and validator set contracts");
+			return Ok(Vec::new());
+		}
 		// Genesis is never a new block, but might as well check.
 		let header = block.header().clone();
 		let first = header.number() == 0;
@@ -1712,12 +1738,12 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		}
 	}
 
-	fn register_client(&self, client: Weak<EngineClient>) {
+	fn register_client(&self, client: Weak<dyn EngineClient>) {
 		*self.client.write() = Some(client.clone());
 		self.validators.register_client(client);
 	}
 
-	fn set_signer(&self, signer: Box<EngineSigner>) {
+	fn set_signer(&self, signer: Box<dyn EngineSigner>) {
 		*self.signer.write() = Some(signer);
 	}
 
@@ -1733,7 +1759,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		)
 	}
 
-	fn snapshot_components(&self) -> Option<Box<::snapshot::SnapshotComponents>> {
+	fn snapshot_components(&self) -> Option<Box<dyn (::snapshot::SnapshotComponents)>> {
 		if self.immediate_transitions {
 			None
 		} else {
@@ -1745,7 +1771,7 @@ impl Engine<EthereumMachine> for AuthorityRound {
 		super::total_difficulty_fork_choice(new, current)
 	}
 
-	fn ancestry_actions(&self, header: &Header, ancestry: &mut Iterator<Item=ExtendedHeader>) -> Vec<AncestryAction> {
+	fn ancestry_actions(&self, header: &Header, ancestry: &mut dyn Iterator<Item=ExtendedHeader>) -> Vec<AncestryAction> {
 		let finalized = self.build_finality(
 			header,
 			&mut ancestry.take_while(|e| !e.is_finalized).map(|e| e.header),
@@ -1801,6 +1827,7 @@ mod tests {
 			strict_empty_steps_transition: 0,
 			quorum_2_3_transition: 0,
 			randomness_contract_address: None,
+			posdao_transition: Some(0),
 		};
 
 		// mutate aura params
