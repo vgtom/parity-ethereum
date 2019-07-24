@@ -590,13 +590,21 @@ impl ChainNotify for EthSync {
 	fn send(&self, _message_type: ChainMessageType, node_id: Option<H512>) {
 		self.network.with_context(WARP_SYNC_PROTOCOL_ID, |context| {
 			let peer_ids = self.network.connected_peers();
-			let node_ids = peer_ids.iter().map(|&x|context.session_info(x).unwrap().id).collect::<Vec<Option<H512>>>();
+			let filter_peers = peer_ids.iter().filter(|&x|{
+										match context.session_info(*x){
+											None => { warn!(target:"sync", "No session exists for peerId {:?}", x); false},
+											Some(n) => true,
+										} 
+									}).collect::<Vec<_>>();
+			let node_ids = filter_peers.iter()
+								.map(|&x|context.session_info(*x).unwrap().id)
+								.collect::<Vec<Option<H512>>>();
 			let index = node_ids.into_iter().position(|r| r == node_id).unwrap();
-			let my_peer_id = peer_ids[index];
+			let my_peer_id = filter_peers[index];
 
 			let mut sync_io = NetSyncIo::new(context, &*self.eth_handler.chain, &*self.eth_handler.snapshot_service, &self.eth_handler.overlay);
 			match _message_type {
-				ChainMessageType::Consensus(message) => self.eth_handler.sync.write().send_consensus_packet(&mut sync_io, message, my_peer_id),
+				ChainMessageType::Consensus(message) => self.eth_handler.sync.write().send_consensus_packet(&mut sync_io, message, *my_peer_id),
 				ChainMessageType::PrivateTransaction(_transaction_hash, _message) =>
 					unimplemented!("TODO: privateTransaction not supported on send."),
 				ChainMessageType::SignedPrivateTransaction(_transaction_hash, _message) =>
