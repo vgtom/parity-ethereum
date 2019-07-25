@@ -296,6 +296,8 @@ pub struct EthSync {
 	light_subprotocol_name: [u8; 3],
 	/// Priority tasks notification channel
 	priority_tasks: Mutex<mpsc::Sender<PriorityTask>>,
+	/// Cache of all messages that could not be sent
+	message_cache: RwLock<HashMap<Option<H512>, Vec<ChainMessageType>>>,
 }
 
 fn light_params(
@@ -370,6 +372,7 @@ impl EthSync {
 			light_subprotocol_name: params.config.light_subprotocol_name,
 			attached_protos: params.attached_protos,
 			priority_tasks: Mutex::new(priority_tasks_tx),
+			message_cache: RwLock::new(HashMap::new()),
 		});
 
 		Ok(sync)
@@ -600,11 +603,38 @@ impl ChainNotify for EthSync {
 			});
 
 			let my_peer_id = match target_peer_id {
-				None => { warn!(target:"sync", "TODO: needs to be added to cache"); return; }
+				None => { 
+							let mut lock = self.message_cache.write();
+							lock.entry(node_id.clone()).or_insert_with(Vec::new).push(_message_type.clone());
+							return; 
+						}
 				Some(n) => n,
 			};
 
 			let mut sync_io = NetSyncIo::new(context, &*self.eth_handler.chain, &*self.eth_handler.snapshot_service, &self.eth_handler.overlay);
+
+			//first lets check if there are already any messages for this node/peer in the cache
+			//and send those first
+			match self.message_cache.read().get(&node_id) {
+				Some(ref vec_msg) => {
+					for msg in vec_msg.iter(){
+						match msg{
+							ChainMessageType::Consensus(message) => self.eth_handler.sync.write().send_consensus_packet(&mut sync_io, message.to_vec(), my_peer_id),
+							ChainMessageType::PrivateTransaction(_transaction_hash, _message) =>
+								unimplemented!("TODO: privateTransaction not supported on send."),
+							ChainMessageType::SignedPrivateTransaction(_transaction_hash, _message) =>
+								unimplemented!("TODO: SignedPrivateTransaction not supported on send."),
+						}
+					}
+				},
+				None => {
+					// do nothing
+				}
+			}
+			//now that all messages have been sent for that nodeid/peerid, lets remove it from the cache
+			let mut message_cache = self.message_cache.write();
+			message_cache.remove(&node_id);
+
 			match _message_type {
 				ChainMessageType::Consensus(message) => self.eth_handler.sync.write().send_consensus_packet(&mut sync_io, message, my_peer_id),
 				ChainMessageType::PrivateTransaction(_transaction_hash, _message) =>
