@@ -473,9 +473,9 @@ impl NetworkProtocolHandler for SyncProtocolHandler {
 		let node_id = io.session_info(*peer).unwrap().id;
 		let mut sync_io = NetSyncIo::new(io, &*self.chain, &*self.snapshot_service, &self.overlay);
 		if let Some(vec_msg) = self.message_cache.write().remove(&node_id) {
-			for msg in vec_msg.iter() {
-				match msg{
-					ChainMessageType::Consensus(message) => self.sync.write().send_consensus_packet(&mut sync_io, message.to_vec(), *peer),
+			for msg in vec_msg {
+				match msg {
+					ChainMessageType::Consensus(message) => self.sync.write().send_consensus_packet(&mut sync_io, message, *peer),
 					ChainMessageType::PrivateTransaction(_transaction_hash, _message) =>
 						unimplemented!("TODO: privateTransaction not supported on send."),
 					ChainMessageType::SignedPrivateTransaction(_transaction_hash, _message) =>
@@ -483,8 +483,6 @@ impl NetworkProtocolHandler for SyncProtocolHandler {
 				}
 			}
 		}
-
-
 	}
 
 	fn disconnected(&self, io: &NetworkContext, peer: &PeerId) {
@@ -620,33 +618,19 @@ impl ChainNotify for EthSync {
 
 			let my_peer_id = match target_peer_id {
 				None => { 
-							let mut lock = self.eth_handler.message_cache.write();
-							lock.entry(node_id.clone()).or_default().push(message_type);
-							return; 
-						}
+					let mut lock = self.eth_handler.message_cache.write();
+					lock.entry(node_id.clone()).or_default().push(message_type);
+					return; 
+				}
 				Some(n) => n,
 			};
 
 			let mut sync_io = NetSyncIo::new(context, &*self.eth_handler.chain, &*self.eth_handler.snapshot_service, &self.eth_handler.overlay);
 
-			// first lets check if there are already any messages for this node/peer in the cache
-			// and send those first
-			if let Some(vec_msg) = self.eth_handler.message_cache.write().remove(&node_id) {
-				for msg in vec_msg.iter() {
-					match msg {
-						ChainMessageType::Consensus(message) => self.eth_handler.sync.write().send_consensus_packet(&mut sync_io, message.to_vec(), my_peer_id),
-						ChainMessageType::PrivateTransaction(_transaction_hash, _message) =>
-							unimplemented!("TODO: privateTransaction not supported on send."),
-						ChainMessageType::SignedPrivateTransaction(_transaction_hash, _message) =>
-							unimplemented!("TODO: SignedPrivateTransaction not supported on send."),
-					}
-				}
-			}
-
 			match message_type {
 				ChainMessageType::Consensus(message) => self.eth_handler.sync.write().send_consensus_packet(&mut sync_io, message, my_peer_id),
 				ChainMessageType::PrivateTransaction(_transaction_hash, _message) =>
-					unimplemented!("TODO: privateTransaction not supported on send."),
+					unimplemented!("TODO: PrivateTransaction not supported on send."),
 				ChainMessageType::SignedPrivateTransaction(_transaction_hash, _message) =>
 					unimplemented!("TODO: SignedPrivateTransaction not supported on send."),
 			}
